@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "handwritten"
+version = "0.1.0"
+description = "Mobile IME handwritten Chinese character recognition"
+requires-python = ">=3.10"
+# 运行时依赖:列在这里只是文档作用,实际由 /home/tfbao/.venv/ 提供
+dependencies = [
+    "numpy",
+    "Pillow",
+    "torch",
+]
+
+[tool.setuptools]
+packages = ["common"]

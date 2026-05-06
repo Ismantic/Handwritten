@@ -230,6 +230,7 @@ data/npy/
 
 # 训练产物(checkpoint / 日志,可能上百 MB)
 runs/
+fit/runs/
 
 # 设计/规划文档(本地参考,不入库)
 private/

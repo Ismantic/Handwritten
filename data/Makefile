@@ -89,14 +89,14 @@ $(VIZ_TAG): $(TRAIN_TAG) $(CHARSET) $(SCRIPTS)/visualize.py $(SCRIPTS)/gnt_parse
 
 npy: $(TRAIN_NPY) $(TEST_NPY)
 
-$(TRAIN_NPY): $(TRAIN_TAG) $(CHARSET) $(SCRIPTS)/build_npy.py $(SCRIPTS)/gnt_parser.py $(SCRIPTS)/normalize.py
+$(TRAIN_NPY): $(TRAIN_TAG) $(CHARSET) $(SCRIPTS)/build_npy.py $(SCRIPTS)/gnt_parser.py ../common/normalize.py
 	@echo "[npy] 训练集归一化 + 写 npy..."
 	$(PYTHON) $(SCRIPTS)/build_npy.py \
 	    --gnt-dir $(RAW_DIR)/train_gnt \
 	    --charset $(CHARSET) \
 	    --out-dir $(NPY_DIR)/train
 
-$(TEST_NPY): $(TEST_TAG) $(CHARSET) $(SCRIPTS)/build_npy.py $(SCRIPTS)/gnt_parser.py $(SCRIPTS)/normalize.py
+$(TEST_NPY): $(TEST_TAG) $(CHARSET) $(SCRIPTS)/build_npy.py $(SCRIPTS)/gnt_parser.py ../common/normalize.py
 	@echo "[npy] 测试集归一化 + 写 npy..."
 	$(PYTHON) $(SCRIPTS)/build_npy.py \
 	    --gnt-dir $(RAW_DIR)/test_gnt \

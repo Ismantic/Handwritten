@@ -20,7 +20,8 @@ from tqdm import tqdm
 
 sys.path.insert(0, str(Path(__file__).parent))
 from gnt_parser import iter_gnt_dir, iter_gnt_dir_labels  # noqa: E402
-from normalize import normalize, CANVAS_SIZE  # noqa: E402
+
+from common.normalize import normalize, CANVAS_SIZE
 
 
 def main() -> None:
