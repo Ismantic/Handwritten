@@ -216,3 +216,20 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# ---- Project-specific ----
+
+# 原始数据集(从 CASIA 单独下载,不入库)
+data/HWDB1.1*.zip
+data/HWDB1.1*.alz
+
+# 数据处理派生产物(由 `make` 生成,可重建)
+data/raw/
+data/processed/
+data/npy/
+
+# 训练产物(checkpoint / 日志,可能上百 MB)
+runs/
+
+# 设计/规划文档(本地参考,不入库)
+private/
