@@ -25,6 +25,28 @@ def _conv_bn_relu(in_ch: int, out_ch: int, kernel_size: int = 3, padding: int = 
     )
 
 
+class GWAP(nn.Module):
+    """Global Weighted Average Pooling(Melnyk et al. 2020)。
+
+    学一个空间权重图代替朴素 GAP:
+        out[c] = sum_{i,j} W[c, i, j] * x[c, i, j]
+    初始化为 1/(H*W) 即等价 GAP,有梯度后偏离学到"哪些位置更重要"。
+
+    可学参数:C × H × W(对 448 ch / 4×4 spatial 是 7168,可忽略)。
+    """
+
+    def __init__(self, channels: int, spatial_h: int, spatial_w: int) -> None:
+        super().__init__()
+        init_val = 1.0 / (spatial_h * spatial_w)
+        self.weight = nn.Parameter(
+            torch.full((channels, spatial_h, spatial_w), init_val, dtype=torch.float32)
+        )
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        # x: [B, C, H, W] → [B, C]
+        return (x * self.weight).sum(dim=(2, 3))
+
+
 class PlainCNN(nn.Module):
     """5 stage CNN,每 stage 后 MaxPool 下采样一次。
 
@@ -67,6 +89,61 @@ class PlainCNN(nn.Module):
         return self.classifier(x)
 
 
+class MelnykNet(nn.Module):
+    """Melnyk-Net(2020 Soft Computing,Melnyk/You/Li)。
+
+    原版 96×96 输入,这里改造为 64×64(我们的部署口径)。
+    14 conv(3×3 + BN + ReLU)分 5 stage,4 次 avg pool,GWAP,FC。
+
+    spatial 流动:64 → 32 → 16 → 8 → 4
+    通道流动(注意"瓶颈"模式 high-low-high):
+        stage 1: 64, 64                        @ 64×64
+        stage 2: 96, 64, 96                    @ 32×32
+        stage 3: 128, 96, 128                  @ 16×16
+        stage 4: 256, 192, 256                 @ 8×8
+        stage 5: 448, 256, 448                 @ 4×4
+
+    总参数 ~6.5M(同原版),FP32 ~25 MB,INT8 ~6.5 MB(超 plan 5MB,需要后续考虑)。
+    """
+
+    def __init__(self, num_classes: int, in_channels: int = 1) -> None:
+        super().__init__()
+
+        def block(in_ch: int, out_ch: int) -> nn.Sequential:
+            return _conv_bn_relu(in_ch, out_ch)
+
+        self.stage1 = nn.Sequential(block(in_channels, 64), block(64, 64))
+        self.stage2 = nn.Sequential(block(64, 96), block(96, 64), block(64, 96))
+        self.stage3 = nn.Sequential(block(96, 128), block(128, 96), block(96, 128))
+        self.stage4 = nn.Sequential(block(128, 256), block(256, 192), block(192, 256))
+        self.stage5 = nn.Sequential(block(256, 448), block(448, 256), block(256, 448))
+        self.pool = nn.AvgPool2d(2)
+        self.gwap = GWAP(448, 4, 4)
+        self.classifier = nn.Linear(448, num_classes)
+
+        self._init_weights()
+
+    def _init_weights(self) -> None:
+        for m in self.modules():
+            if isinstance(m, nn.Conv2d):
+                nn.init.kaiming_normal_(m.weight, mode="fan_out", nonlinearity="relu")
+            elif isinstance(m, nn.BatchNorm2d):
+                nn.init.ones_(m.weight)
+                nn.init.zeros_(m.bias)
+            elif isinstance(m, nn.Linear):
+                nn.init.normal_(m.weight, 0, 0.01)
+                nn.init.zeros_(m.bias)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        x = self.stage1(x); x = self.pool(x)
+        x = self.stage2(x); x = self.pool(x)
+        x = self.stage3(x); x = self.pool(x)
+        x = self.stage4(x); x = self.pool(x)
+        x = self.stage5(x)  # 4×4
+        x = self.gwap(x)
+        return self.classifier(x)
+
+
 def _build_mobilenet_v3_small_hccr(num_classes: int, in_channels: int = 1) -> nn.Module:
     """torchvision MobileNetV3-Small 改造:
     - 第一层 conv 改成单通道输入(3 → 1)
@@ -86,6 +163,123 @@ def _build_mobilenet_v3_small_hccr(num_classes: int, in_channels: int = 1) -> nn
         nn.Dropout(p=0.2, inplace=False),
         nn.Linear(576, num_classes),
     )
+    # torchvision 在 mobilenet_v3_small() 构造时跑过 init loop(Conv kaiming_normal,
+    # Linear normal(0, 0.01))。我们之后才替换层,新层是 PyTorch 默认 init,
+    # stddev 偏大(分类头 2.3x),早期梯度信号偏强 —— 重新走一遍同样的 init。
+    for layer in (model.features[0][0], model.classifier[1]):
+        if isinstance(layer, nn.Conv2d):
+            nn.init.kaiming_normal_(layer.weight, mode="fan_out")
+            if layer.bias is not None:
+                nn.init.zeros_(layer.bias)
+        elif isinstance(layer, nn.Linear):
+            nn.init.normal_(layer.weight, 0, 0.01)
+            nn.init.zeros_(layer.bias)
+    return model
+
+
+class MobileNetV2WithGWAP(nn.Module):
+    """V2 改造 + 借 Melnyk-Net 的 GWAP 替换 GAP。
+
+    流程:V2 features → GWAP(C × 2 × 2 学习权重)→ Dropout → Linear。
+    输入 [B,1,64,64]:V2 5 次 stride 2 下采样 → 2×2 spatial。
+    """
+
+    def __init__(
+        self, num_classes: int, in_channels: int = 1, last_channel: int = 576
+    ) -> None:
+        super().__init__()
+        from torchvision.models import mobilenet_v2
+
+        base = mobilenet_v2()
+        base.features[0][0] = nn.Conv2d(
+            in_channels, 32, kernel_size=3, stride=2, padding=1, bias=False
+        )
+        base.features[18] = nn.Sequential(
+            nn.Conv2d(320, last_channel, kernel_size=1, bias=False),
+            nn.BatchNorm2d(last_channel),
+            nn.ReLU6(inplace=True),
+        )
+        self.features = base.features
+        # 64 input → 5 次 stride 2 → 2×2 spatial 在末端
+        self.gwap = GWAP(last_channel, 2, 2)
+        self.classifier = nn.Sequential(
+            nn.Dropout(p=0.2, inplace=False),
+            nn.Linear(last_channel, num_classes),
+        )
+
+        for layer in (
+            self.features[0][0],
+            self.features[18][0],
+            self.features[18][1],
+            self.classifier[1],
+        ):
+            if isinstance(layer, nn.Conv2d):
+                nn.init.kaiming_normal_(layer.weight, mode="fan_out")
+                if layer.bias is not None:
+                    nn.init.zeros_(layer.bias)
+            elif isinstance(layer, nn.BatchNorm2d):
+                nn.init.ones_(layer.weight)
+                nn.init.zeros_(layer.bias)
+            elif isinstance(layer, nn.Linear):
+                nn.init.normal_(layer.weight, 0, 0.01)
+                nn.init.zeros_(layer.bias)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        x = self.features(x)  # [B, last_ch, 2, 2]
+        x = self.gwap(x)      # [B, last_ch]
+        return self.classifier(x)
+
+
+def _build_mobilenet_v2_hccr(
+    num_classes: int, in_channels: int = 1, last_channel: int = 576
+) -> nn.Module:
+    """torchvision MobileNetV2 改造 for HCCR:
+    - 第一层 conv 改单通道输入(3 → 1)
+    - 最后 1×1 expand 从 320→1280 改为 320→last_channel(默认 576),
+      避免分类头 Linear(1280, 3755) 单层就 4.8M params
+    - 分类头 Linear(last_channel, num_classes)
+
+    保留 ReLU6 + 标准 inverted residual(无 SE,无 HSwish,无 NAS 不规则宽度),
+    量化最稳。skip connection(ResNet 思想)在 inverted residual 块内自动包含。
+
+    输入: [B, 1, 64, 64]
+    输出: [B, num_classes]
+    """
+    from torchvision.models import mobilenet_v2
+
+    model = mobilenet_v2(num_classes=num_classes)
+    # 1. 第一层 conv:3 → 1
+    model.features[0][0] = nn.Conv2d(
+        in_channels, 32, kernel_size=3, stride=2, padding=1, bias=False
+    )
+    # 2. 最后 1×1 expand:320 → last_channel
+    model.features[18] = nn.Sequential(
+        nn.Conv2d(320, last_channel, kernel_size=1, bias=False),
+        nn.BatchNorm2d(last_channel),
+        nn.ReLU6(inplace=True),
+    )
+    # 3. 分类头:Dropout + Linear
+    model.classifier = nn.Sequential(
+        nn.Dropout(p=0.2, inplace=False),
+        nn.Linear(last_channel, num_classes),
+    )
+    # 4. 替换层后重新跑 torchvision 的 init 约定(同 V3 处理)
+    for layer in (
+        model.features[0][0],
+        model.features[18][0],
+        model.features[18][1],
+        model.classifier[1],
+    ):
+        if isinstance(layer, nn.Conv2d):
+            nn.init.kaiming_normal_(layer.weight, mode="fan_out")
+            if layer.bias is not None:
+                nn.init.zeros_(layer.bias)
+        elif isinstance(layer, nn.BatchNorm2d):
+            nn.init.ones_(layer.weight)
+            nn.init.zeros_(layer.bias)
+        elif isinstance(layer, nn.Linear):
+            nn.init.normal_(layer.weight, 0, 0.01)
+            nn.init.zeros_(layer.bias)
     return model
 
 
@@ -94,6 +288,12 @@ def build_model(name: str, num_classes: int) -> nn.Module:
         return PlainCNN(num_classes)
     if name == "mobilenet_v3_small":
         return _build_mobilenet_v3_small_hccr(num_classes)
+    if name == "mobilenet_v2":
+        return _build_mobilenet_v2_hccr(num_classes)
+    if name == "mobilenet_v2_gwap":
+        return MobileNetV2WithGWAP(num_classes)
+    if name == "melnyk_net":
+        return MelnykNet(num_classes)
     raise ValueError(f"未知模型: {name}")
 
 
@@ -104,7 +304,7 @@ def count_params(model: nn.Module) -> int:
 if __name__ == "__main__":
     # smoke:确认能 forward,参数量符合预期
     x = torch.randn(2, 1, 64, 64)
-    for name in ("plain_cnn", "mobilenet_v3_small"):
+    for name in ("plain_cnn", "mobilenet_v3_small", "mobilenet_v2", "mobilenet_v2_gwap", "melnyk_net"):
         model = build_model(name, num_classes=3755)
         n = count_params(model)
         bytes_ = sum(p.numel() * p.element_size() for p in model.parameters())

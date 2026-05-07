@@ -45,6 +45,7 @@ class TrainConfig:
     epochs: int = 1
     batch_size: int = 128
     lr: float = 1e-3
+    min_lr: float = 0.0
     weight_decay: float = 1e-4
     label_smoothing: float = 0.1
     warmup_epochs: int = 5
@@ -52,6 +53,7 @@ class TrainConfig:
 
     num_workers: int = 4
     amp: bool = True
+    augment: bool = False
 
     subset_frac: float = 1.0
     seed: int = 0
@@ -67,10 +69,27 @@ def set_seed(seed: int) -> None:
     torch.cuda.manual_seed_all(seed)
 
 
+def _build_augment():
+    """训练时数据增强 —— 仿射 + 擦除。dataset.py 已经把图翻成 笔画=高,背景=0,所以 fill=0。"""
+    from torchvision.transforms import v2
+    return v2.Compose([
+        v2.RandomAffine(
+            degrees=10,
+            translate=(0.05, 0.05),
+            scale=(0.85, 1.15),
+            fill=0,  # 0 = 背景(我们的图已经 255-x 翻过)
+        ),
+        v2.RandomErasing(p=0.2, scale=(0.02, 0.10), value=0),
+    ])
+
+
 def make_loaders(cfg: TrainConfig) -> tuple[DataLoader, DataLoader, Charset]:
     charset = Charset.load(cfg.charset)
-    train_ds = HWDBDataset(cfg.npy_train)
+    augment_train = _build_augment() if cfg.augment else None
+    train_ds = HWDBDataset(cfg.npy_train, augment=augment_train)
     test_ds = HWDBDataset(cfg.npy_test)
+    if cfg.augment:
+        print("[train] 数据增强:RandomAffine(±10° / ±15% scale / ±5% translate) + RandomErasing(p=0.2)")
 
     if cfg.subset_frac < 1.0:
         n = len(train_ds)
@@ -100,11 +119,18 @@ def make_loaders(cfg: TrainConfig) -> tuple[DataLoader, DataLoader, Charset]:
     return train_loader, test_loader, charset
 
 
-def cosine_warmup_lr(step: int, total_steps: int, warmup_steps: int, base_lr: float) -> float:
+def cosine_warmup_lr(
+    step: int,
+    total_steps: int,
+    warmup_steps: int,
+    base_lr: float,
+    min_lr: float = 0.0,
+) -> float:
     if step < warmup_steps:
         return base_lr * (step + 1) / max(1, warmup_steps)
     progress = (step - warmup_steps) / max(1, total_steps - warmup_steps)
-    return base_lr * 0.5 * (1.0 + math.cos(math.pi * progress))
+    cos_factor = 0.5 * (1.0 + math.cos(math.pi * progress))
+    return min_lr + (base_lr - min_lr) * cos_factor
 
 
 @torch.no_grad()
@@ -148,7 +174,7 @@ def train_one_epoch(
         y = y.to(device, non_blocking=True)
 
         # cosine + warmup LR
-        lr = cosine_warmup_lr(global_step, total_steps, warmup_steps, cfg.lr)
+        lr = cosine_warmup_lr(global_step, total_steps, warmup_steps, cfg.lr, cfg.min_lr)
         for pg in optimizer.param_groups:
             pg["lr"] = lr
 
