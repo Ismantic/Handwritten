@@ -22,7 +22,7 @@ public class MainActivity extends Activity implements HandwritingView.StrokeList
     private static final String NCNN_BIN   = "mbv2_aug.int8.ncnn.bin";
     private static final String CHARSET    = "charset.json";
     private static final int TOPK = 10;
-    private static final long RECOGNIZE_DELAY_MS = 200;  // 抬笔后多久触发识别
+    private static final long RECOGNIZE_DELAY_MS = 150;  // 抬笔后多久触发识别(跟 Python demo 一致)
 
     private HandwritingView handwriting;
     private LinearLayout candidates;
@@ -177,7 +177,6 @@ public class MainActivity extends Activity implements HandwritingView.StrokeList
      * 简单版本,精度够用(后期可下沉到 native 提高一致性)。
      */
     private float[] preprocessToFloat64x64(Bitmap src) {
-        // 1. 转灰度并提取像素
         int w = src.getWidth();
         int h = src.getHeight();
         int[] argb = new int[w * h];
@@ -188,12 +187,9 @@ public class MainActivity extends Activity implements HandwritingView.StrokeList
             int r = (c >> 16) & 0xff;
             int g = (c >> 8) & 0xff;
             int b = c & 0xff;
-            // luminance
-            int y = (299 * r + 587 * g + 114 * b) / 1000;
-            gray[i] = (byte) y;
+            gray[i] = (byte) ((299 * r + 587 * g + 114 * b) / 1000);
         }
 
-        // 2. 找前景 bbox(像素 < 220 算笔画;白底 ≈ 255)
         int minX = w, minY = h, maxX = -1, maxY = -1;
         for (int y = 0; y < h; y++) {
             for (int x = 0; x < w; x++) {
@@ -206,47 +202,114 @@ public class MainActivity extends Activity implements HandwritingView.StrokeList
                 }
             }
         }
-        if (maxX < 0) {
-            // 全白,返回全 0(stroke 空)
-            return new float[64 * 64];
-        }
+        if (maxX < 0) return new float[64 * 64];
 
-        // 3. 裁切 + 等比缩 long_edge=56 + 居中放到 64×64 白底
+        // 裁 + ★area-average★ 缩长边 56(等价 cv2.INTER_AREA / PIL.BILINEAR-with-prefilter)
+        // 不用 Bitmap.createScaledBitmap,那个是简单 2x2 bilinear,大缩放因子下产生硬边
         int cropW = maxX - minX + 1;
         int cropH = maxY - minY + 1;
-        Bitmap cropped = Bitmap.createBitmap(src, minX, minY, cropW, cropH);
+        byte[] cropped = new byte[cropW * cropH];
+        for (int y = 0; y < cropH; y++) {
+            System.arraycopy(gray, (minY + y) * w + minX, cropped, y * cropW, cropW);
+        }
         float scale = 56f / Math.max(cropW, cropH);
         int newW = Math.max(1, Math.round(cropW * scale));
         int newH = Math.max(1, Math.round(cropH * scale));
-        Bitmap resized = Bitmap.createScaledBitmap(cropped, newW, newH, true);
+        // 用 PIL.Image.BILINEAR 等价实现(三角核 separable),严格跟 Python normalize 一致
+        byte[] resized = resizePilBilinear(cropped, cropW, cropH, newW, newH);
 
-        // 64×64 白底
-        Bitmap canvas = Bitmap.createBitmap(64, 64, Bitmap.Config.ARGB_8888);
-        canvas.eraseColor(Color.WHITE);
+        // 居中放到 64×64 白底
+        byte[] canvas = new byte[64 * 64];
+        java.util.Arrays.fill(canvas, (byte) 255);
         int offX = (64 - newW) / 2;
         int offY = (64 - newH) / 2;
-        android.graphics.Canvas c = new android.graphics.Canvas(canvas);
-        c.drawBitmap(resized, offX, offY, null);
-
-        // 4. → float[1, 64, 64],翻转(stroke=高,bg=0),归一化
-        int[] px = new int[64 * 64];
-        canvas.getPixels(px, 0, 64, 0, 0, 64, 64);
-        float[] out = new float[64 * 64];
-        for (int i = 0; i < px.length; i++) {
-            int c2 = px[i];
-            int r = (c2 >> 16) & 0xff;
-            int g = (c2 >> 8) & 0xff;
-            int b = c2 & 0xff;
-            int y = (299 * r + 587 * g + 114 * b) / 1000;
-            // (255 - y) / 255
-            out[i] = (255 - y) / 255f;
+        for (int y = 0; y < newH; y++) {
+            System.arraycopy(resized, y * newW, canvas, (offY + y) * 64 + offX, newW);
         }
 
-        // 释放临时 bitmap
-        if (cropped != src) cropped.recycle();
-        if (resized != cropped) resized.recycle();
-        canvas.recycle();
+        // → float[1, 64, 64],翻转 + 归一化
+        float[] out = new float[64 * 64];
+        for (int i = 0; i < canvas.length; i++) {
+            int v = canvas[i] & 0xff;
+            out[i] = (255 - v) / 255f;
+        }
         return out;
+    }
+
+    /**
+     * PIL.Image.BILINEAR 等价实现(separable 三角核重采样)。
+     *
+     * PIL 源码(Pillow/src/libImaging/Resample.c):
+     *   - 横竖两 pass(separable),每个 pass:
+     *     output 像素 i 的中心(input 坐标)= (i+0.5) * scale
+     *     kernel 半宽 support = max(1, scale)(downscale 时拉宽)
+     *     权重 w(d) = max(0, 1 - |d| / max(1, scale)),三角核
+     *     normalize w 之和为 1
+     *
+     * 我们之前用的 area-avg 是 box 核(覆盖 scale 宽),PIL 的三角核覆盖 2×scale 宽 →
+     * 边缘像素受更宽邻域影响,产生更长的渐变带。
+     */
+    private static byte[] resizePilBilinear(byte[] src, int srcW, int srcH, int dstW, int dstH) {
+        byte[] tmp = new byte[dstW * srcH];
+        resamplePilPass(src, srcW, srcH, tmp, dstW, srcH, true);
+        byte[] dst = new byte[dstW * dstH];
+        resamplePilPass(tmp, dstW, srcH, dst, dstW, dstH, false);
+        return dst;
+    }
+
+    private static void resamplePilPass(
+        byte[] src, int srcW, int srcH,
+        byte[] dst, int dstW, int dstH,
+        boolean horizontal
+    ) {
+        int outDim = horizontal ? dstW : dstH;
+        int inDim = horizontal ? srcW : srcH;
+        float scale = (float) inDim / outDim;
+        float filterscale = Math.max(1.0f, scale);
+        float invFilterscale = 1.0f / filterscale;
+
+        int[] xMin = new int[outDim];
+        int[] xMax = new int[outDim];
+        float[][] weights = new float[outDim][];
+        for (int xx = 0; xx < outDim; xx++) {
+            float center = (xx + 0.5f) * scale;
+            int xmin = Math.max(0, (int) (center - filterscale + 0.5f));
+            int xmax = Math.min(inDim, (int) (center + filterscale + 0.5f));
+            int len = Math.max(1, xmax - xmin);
+            float[] w = new float[len];
+            float sum = 0;
+            for (int x = 0; x < len; x++) {
+                float d = ((xmin + x) + 0.5f - center) * invFilterscale;
+                float wv = Math.max(0f, 1.0f - Math.abs(d));
+                w[x] = wv;
+                sum += wv;
+            }
+            if (sum > 0) for (int x = 0; x < len; x++) w[x] /= sum;
+            xMin[xx] = xmin;
+            xMax[xx] = xmax;
+            weights[xx] = w;
+        }
+
+        for (int y = 0; y < dstH; y++) {
+            for (int xx = 0; xx < dstW; xx++) {
+                int outIdx = horizontal ? xx : y;
+                int srcRow = horizontal ? y : xx;
+                int xmin = xMin[outIdx];
+                int xmax = xMax[outIdx];
+                float[] w = weights[outIdx];
+                float sum = 0;
+                for (int x = 0; x < (xmax - xmin); x++) {
+                    int srcVal = horizontal
+                        ? (src[srcRow * srcW + xmin + x] & 0xff)
+                        : (src[(xmin + x) * srcW + srcRow] & 0xff);
+                    sum += srcVal * w[x];
+                }
+                int v = Math.round(sum);
+                if (v < 0) v = 0;
+                if (v > 255) v = 255;
+                dst[y * dstW + xx] = (byte) v;
+            }
+        }
     }
 
     private void updateCandidates(HCCRRecognizer.Result[] results) {

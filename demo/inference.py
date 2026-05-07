@@ -54,6 +54,12 @@ class HCCRRecognizer:
         x = self.preprocess(image)
         if not x.any():
             return []
+        # DEBUG:存预处理后的 64×64 给调试用(stroke 反翻回 0=黑笔画 255=白底,直观)
+        try:
+            preview = (255 - (x[0] * 255).clip(0, 255)).astype(np.uint8)
+            Image.fromarray(preview, mode="L").save("/tmp/python_last_input.png")
+        except Exception:
+            pass
         mat = ncnn.Mat(x)
         ex = self.net.create_extractor()
         ex.input("in0", mat)
