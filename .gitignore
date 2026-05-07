@@ -235,5 +235,16 @@ fit/runs/
 # 模型导出产物(.pt / .ncnn / .onnx 等,从 ckpt 重建即可)
 export/output/
 
+# Android 构建产物 + 本地配置 + 第三方库
+android/.gradle/
+android/build/
+android/app/build/
+android/app/.cxx/
+android/local.properties
+android/third_party/
+android/app/src/main/assets/*.ncnn.*
+android/app/src/main/assets/charset.json
+
+
 # 设计/规划文档(本地参考,不入库)
 private/
