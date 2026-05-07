@@ -99,6 +99,9 @@ def make_loaders(cfg: TrainConfig) -> tuple[DataLoader, DataLoader, Charset]:
         train_ds = Subset(train_ds, idx.tolist())
         print(f"[train] subset_frac={cfg.subset_frac} → {k}/{n} 训练样本")
 
+    # 内存紧时 num_workers > 0 用默认 fork 会 OOM(父进程大,fork 复制开销高)。
+    # 用 spawn 启个干净的 Python 子进程,内存占用 ~500MB 而非父进程 GB 级。
+    mp_ctx = "spawn" if cfg.num_workers > 0 else None
     train_loader = DataLoader(
         train_ds,
         batch_size=cfg.batch_size,
@@ -107,6 +110,7 @@ def make_loaders(cfg: TrainConfig) -> tuple[DataLoader, DataLoader, Charset]:
         pin_memory=True,
         drop_last=True,
         persistent_workers=cfg.num_workers > 0,
+        multiprocessing_context=mp_ctx,
     )
     test_loader = DataLoader(
         test_ds,
@@ -115,6 +119,7 @@ def make_loaders(cfg: TrainConfig) -> tuple[DataLoader, DataLoader, Charset]:
         num_workers=cfg.num_workers,
         pin_memory=True,
         persistent_workers=cfg.num_workers > 0,
+        multiprocessing_context=mp_ctx,
     )
     return train_loader, test_loader, charset
 
