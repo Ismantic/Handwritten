@@ -10,11 +10,13 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstring>
 #include <memory>
 #include <numeric>
 #include <vector>
 
 #include "net.h"
+#include "preprocess.h"   // 共享的 C 预处理(跟 Python ctypes 同一份源码)
 
 #define TAG "HCCRJNI"
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO,  TAG, __VA_ARGS__)
@@ -80,7 +82,7 @@ Java_com_shiyu_hccr_HCCRRecognizer_nativePredict(
         return 0;
     }
 
-    // 拷到 ncnn::Mat([1, 64, 64]),fastest 方式是把 jfloatArray 直接做内存复制
+    // 拷到 ncnn::Mat([1, 64, 64])
     ncnn::Mat in(64, 64, 1);
     {
         jfloat* src = env->GetFloatArrayElements(jInput, nullptr);
@@ -143,6 +145,35 @@ Java_com_shiyu_hccr_HCCRRecognizer_nativeRelease(
     if (session) {
         delete session;
     }
+}
+
+/**
+ * 共享 C 预处理桥接:Java 端把灰度 byte[] (任意尺寸) 喂进来,
+ * native 直接调 hccr_preprocess(跟 Python ctypes 加载的同一份源码),
+ * 输出 float[64*64] 模型输入。Java 端不再做 PIL bilinear / bbox 等。
+ */
+JNIEXPORT jboolean JNICALL
+Java_com_shiyu_hccr_HCCRRecognizer_nativePreprocess(
+    JNIEnv* env, jobject /*thiz*/,
+    jbyteArray jGray, jint w, jint h, jfloatArray jOut) {
+
+    if (env->GetArrayLength(jGray) != w * h) {
+        LOGE("gray length mismatch: array=%d w*h=%d", env->GetArrayLength(jGray), w * h);
+        return JNI_FALSE;
+    }
+    if (env->GetArrayLength(jOut) != 64 * 64) {
+        LOGE("out length=%d expected 4096", env->GetArrayLength(jOut));
+        return JNI_FALSE;
+    }
+
+    jbyte* grayBytes = env->GetByteArrayElements(jGray, nullptr);
+    jfloat* outFloats = env->GetFloatArrayElements(jOut, nullptr);
+
+    int ok = hccr_preprocess(reinterpret_cast<const uint8_t*>(grayBytes), w, h, outFloats);
+
+    env->ReleaseByteArrayElements(jGray, grayBytes, JNI_ABORT);
+    env->ReleaseFloatArrayElements(jOut, outFloats, 0);
+    return ok ? JNI_TRUE : JNI_FALSE;
 }
 
 }  // extern "C"

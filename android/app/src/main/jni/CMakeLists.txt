@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.22)
-project(hccr_jni LANGUAGES CXX)
+project(hccr_jni LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -14,7 +14,14 @@ endif()
 set(ncnn_DIR ${NCNN_ROOT}/lib/cmake/ncnn)
 find_package(ncnn REQUIRED)
 
-add_library(hccr_jni SHARED hccr_jni.cc)
+# 共享预处理 C 实现(跟 Python 端 ctypes 加载的同一份源码)
+set(HCCR_COMMON_CPP ${CMAKE_CURRENT_LIST_DIR}/../../../../../common/cpp)
+
+add_library(hccr_jni SHARED
+    hccr_jni.cc
+    ${HCCR_COMMON_CPP}/preprocess.c
+)
+target_include_directories(hccr_jni PRIVATE ${HCCR_COMMON_CPP})
 target_link_libraries(hccr_jni
     PRIVATE
         ncnn

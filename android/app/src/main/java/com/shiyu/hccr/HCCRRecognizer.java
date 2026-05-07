@@ -91,7 +91,19 @@ public class HCCRRecognizer {
         }
     }
 
+    /**
+     * 调用 C 预处理(跟 Python ctypes 共享同一份源码)。
+     *
+     * @param gray   row-major 灰度数据,长度 w*h(255=白底,0=笔画)
+     * @param out    float[64*64] 输出缓冲(模型 input,stroke=高)
+     * @return       true 成功,false 输入全白(out 已置零)
+     */
+    public boolean preprocess(byte[] gray, int w, int h, float[] out) {
+        return nativePreprocess(gray, w, h, out);
+    }
+
     private native long nativeInit(AssetManager am, String paramName, String binName);
     private native int  nativePredict(long handle, float[] input, int[] outIndices, float[] outProbs, int k);
     private native void nativeRelease(long handle);
+    private native boolean nativePreprocess(byte[] gray, int w, int h, float[] out);
 }

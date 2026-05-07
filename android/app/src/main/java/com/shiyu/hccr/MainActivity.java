@@ -166,15 +166,9 @@ public class MainActivity extends Activity implements HandwritingView.StrokeList
     }
 
     /**
-     * Bitmap (RGBA, 任意尺寸,白底黑笔)→ float[64*64]
-     * 与训练时 dataset.py 的预处理对齐:
-     *   1. 找笔画前景 bbox
-     *   2. 长边等比缩到 56,居中放到 64×64(白底)
-     *   3. 翻成 stroke=高:(255 - gray) / 255 → float
-     *
-     * 注意:这里复用 native 端的归一化逻辑会更精确(common.normalize 有 bbox + bilinear),
-     * 但 native 接收 RGBA 输入还要再传一遍格式;先在 Java 里走 Bitmap.createScaledBitmap
-     * 简单版本,精度够用(后期可下沉到 native 提高一致性)。
+     * Bitmap (RGBA) → float[64*64]。Java 端只做 ARGB → 灰度,
+     * 后面的 bbox / bilinear / 翻转 / 归一化全部走 ★common/cpp/preprocess.c★
+     * (跟 Python ctypes 同一份源码,字节级一致)。
      */
     private float[] preprocessToFloat64x64(Bitmap src) {
         int w = src.getWidth();
@@ -189,128 +183,11 @@ public class MainActivity extends Activity implements HandwritingView.StrokeList
             int b = c & 0xff;
             gray[i] = (byte) ((299 * r + 587 * g + 114 * b) / 1000);
         }
-
-        int minX = w, minY = h, maxX = -1, maxY = -1;
-        for (int y = 0; y < h; y++) {
-            for (int x = 0; x < w; x++) {
-                int v = gray[y * w + x] & 0xff;
-                if (v < 220) {
-                    if (x < minX) minX = x;
-                    if (x > maxX) maxX = x;
-                    if (y < minY) minY = y;
-                    if (y > maxY) maxY = y;
-                }
-            }
-        }
-        if (maxX < 0) return new float[64 * 64];
-
-        // 裁 + ★area-average★ 缩长边 56(等价 cv2.INTER_AREA / PIL.BILINEAR-with-prefilter)
-        // 不用 Bitmap.createScaledBitmap,那个是简单 2x2 bilinear,大缩放因子下产生硬边
-        int cropW = maxX - minX + 1;
-        int cropH = maxY - minY + 1;
-        byte[] cropped = new byte[cropW * cropH];
-        for (int y = 0; y < cropH; y++) {
-            System.arraycopy(gray, (minY + y) * w + minX, cropped, y * cropW, cropW);
-        }
-        float scale = 56f / Math.max(cropW, cropH);
-        int newW = Math.max(1, Math.round(cropW * scale));
-        int newH = Math.max(1, Math.round(cropH * scale));
-        // 用 PIL.Image.BILINEAR 等价实现(三角核 separable),严格跟 Python normalize 一致
-        byte[] resized = resizePilBilinear(cropped, cropW, cropH, newW, newH);
-
-        // 居中放到 64×64 白底
-        byte[] canvas = new byte[64 * 64];
-        java.util.Arrays.fill(canvas, (byte) 255);
-        int offX = (64 - newW) / 2;
-        int offY = (64 - newH) / 2;
-        for (int y = 0; y < newH; y++) {
-            System.arraycopy(resized, y * newW, canvas, (offY + y) * 64 + offX, newW);
-        }
-
-        // → float[1, 64, 64],翻转 + 归一化
         float[] out = new float[64 * 64];
-        for (int i = 0; i < canvas.length; i++) {
-            int v = canvas[i] & 0xff;
-            out[i] = (255 - v) / 255f;
-        }
+        recognizer.preprocess(gray, w, h, out);
         return out;
     }
 
-    /**
-     * PIL.Image.BILINEAR 等价实现(separable 三角核重采样)。
-     *
-     * PIL 源码(Pillow/src/libImaging/Resample.c):
-     *   - 横竖两 pass(separable),每个 pass:
-     *     output 像素 i 的中心(input 坐标)= (i+0.5) * scale
-     *     kernel 半宽 support = max(1, scale)(downscale 时拉宽)
-     *     权重 w(d) = max(0, 1 - |d| / max(1, scale)),三角核
-     *     normalize w 之和为 1
-     *
-     * 我们之前用的 area-avg 是 box 核(覆盖 scale 宽),PIL 的三角核覆盖 2×scale 宽 →
-     * 边缘像素受更宽邻域影响,产生更长的渐变带。
-     */
-    private static byte[] resizePilBilinear(byte[] src, int srcW, int srcH, int dstW, int dstH) {
-        byte[] tmp = new byte[dstW * srcH];
-        resamplePilPass(src, srcW, srcH, tmp, dstW, srcH, true);
-        byte[] dst = new byte[dstW * dstH];
-        resamplePilPass(tmp, dstW, srcH, dst, dstW, dstH, false);
-        return dst;
-    }
-
-    private static void resamplePilPass(
-        byte[] src, int srcW, int srcH,
-        byte[] dst, int dstW, int dstH,
-        boolean horizontal
-    ) {
-        int outDim = horizontal ? dstW : dstH;
-        int inDim = horizontal ? srcW : srcH;
-        float scale = (float) inDim / outDim;
-        float filterscale = Math.max(1.0f, scale);
-        float invFilterscale = 1.0f / filterscale;
-
-        int[] xMin = new int[outDim];
-        int[] xMax = new int[outDim];
-        float[][] weights = new float[outDim][];
-        for (int xx = 0; xx < outDim; xx++) {
-            float center = (xx + 0.5f) * scale;
-            int xmin = Math.max(0, (int) (center - filterscale + 0.5f));
-            int xmax = Math.min(inDim, (int) (center + filterscale + 0.5f));
-            int len = Math.max(1, xmax - xmin);
-            float[] w = new float[len];
-            float sum = 0;
-            for (int x = 0; x < len; x++) {
-                float d = ((xmin + x) + 0.5f - center) * invFilterscale;
-                float wv = Math.max(0f, 1.0f - Math.abs(d));
-                w[x] = wv;
-                sum += wv;
-            }
-            if (sum > 0) for (int x = 0; x < len; x++) w[x] /= sum;
-            xMin[xx] = xmin;
-            xMax[xx] = xmax;
-            weights[xx] = w;
-        }
-
-        for (int y = 0; y < dstH; y++) {
-            for (int xx = 0; xx < dstW; xx++) {
-                int outIdx = horizontal ? xx : y;
-                int srcRow = horizontal ? y : xx;
-                int xmin = xMin[outIdx];
-                int xmax = xMax[outIdx];
-                float[] w = weights[outIdx];
-                float sum = 0;
-                for (int x = 0; x < (xmax - xmin); x++) {
-                    int srcVal = horizontal
-                        ? (src[srcRow * srcW + xmin + x] & 0xff)
-                        : (src[(xmin + x) * srcW + srcRow] & 0xff);
-                    sum += srcVal * w[x];
-                }
-                int v = Math.round(sum);
-                if (v < 0) v = 0;
-                if (v > 255) v = 255;
-                dst[y * dstW + xx] = (byte) v;
-            }
-        }
-    }
 
     private void updateCandidates(HCCRRecognizer.Result[] results) {
         for (int i = 0; i < TOPK; i++) {
