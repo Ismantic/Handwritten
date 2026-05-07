@@ -232,5 +232,8 @@ data/npy/
 runs/
 fit/runs/
 
+# 模型导出产物(.pt / .ncnn / .onnx 等,从 ckpt 重建即可)
+export/output/
+
 # 设计/规划文档(本地参考,不入库)
 private/
