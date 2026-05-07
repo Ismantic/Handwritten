@@ -2,73 +2,92 @@
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:orientation="vertical"
-    android:padding="12dp"
-    android:paddingTop="32dp">
+    android:orientation="vertical">
 
-    <!-- 顶部状态栏 -->
-    <TextView
-        android:id="@+id/status"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:textSize="16sp"
-        android:textColor="#222"
-        android:text="@string/status_loading" />
-
-    <!-- 画板:占主要空间 -->
-    <com.shiyu.hccr.HandwritingView
-        android:id="@+id/handwriting"
+    <!-- 上半屏:占位空白(模拟"应用上文区",让 IME 看上去真的从下方弹出) -->
+    <View
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
-        android:layout_marginTop="8dp"
-        android:background="@drawable/canvas_bg" />
+        android:background="#EEEEEE" />
 
-    <!-- 候选栏:画板下方,IME 布局风格 -->
-    <HorizontalScrollView
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="12dp"
-        android:scrollbars="none">
-
-        <LinearLayout
-            android:id="@+id/candidates"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal">
-
-            <TextView android:id="@+id/cand_0" android:layout_width="72dp" android:layout_height="80dp" style="@style/CandidateButton" />
-            <TextView android:id="@+id/cand_1" android:layout_width="72dp" android:layout_height="80dp" style="@style/CandidateButton" />
-            <TextView android:id="@+id/cand_2" android:layout_width="72dp" android:layout_height="80dp" style="@style/CandidateButton" />
-            <TextView android:id="@+id/cand_3" android:layout_width="72dp" android:layout_height="80dp" style="@style/CandidateButton" />
-            <TextView android:id="@+id/cand_4" android:layout_width="72dp" android:layout_height="80dp" style="@style/CandidateButton" />
-            <TextView android:id="@+id/cand_5" android:layout_width="72dp" android:layout_height="80dp" style="@style/CandidateButton" />
-            <TextView android:id="@+id/cand_6" android:layout_width="72dp" android:layout_height="80dp" style="@style/CandidateButton" />
-            <TextView android:id="@+id/cand_7" android:layout_width="72dp" android:layout_height="80dp" style="@style/CandidateButton" />
-            <TextView android:id="@+id/cand_8" android:layout_width="72dp" android:layout_height="80dp" style="@style/CandidateButton" />
-            <TextView android:id="@+id/cand_9" android:layout_width="72dp" android:layout_height="80dp" style="@style/CandidateButton" />
-        </LinearLayout>
-    </HorizontalScrollView>
-
-    <!-- 底部控制栏 -->
+    <!-- 下半屏:IME 风格面板 -->
     <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:layout_marginTop="12dp"
-        android:gravity="end">
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:orientation="vertical"
+        android:background="#FFFFFF"
+        android:padding="10dp"
+        android:elevation="6dp">
 
-        <Button
-            android:id="@+id/btn_undo"
-            android:layout_width="wrap_content"
+        <!-- 状态 + 候选 在顶端(IME 标准) -->
+        <TextView
+            android:id="@+id/status"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="@string/btn_undo"
-            android:layout_marginEnd="8dp" />
+            android:textSize="13sp"
+            android:textColor="#444"
+            android:singleLine="true"
+            android:ellipsize="end"
+            android:text="@string/status_loading" />
 
-        <Button
-            android:id="@+id/btn_clear"
-            android:layout_width="wrap_content"
+        <HorizontalScrollView
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="@string/btn_clear" />
+            android:layout_marginTop="6dp"
+            android:scrollbars="none">
+
+            <LinearLayout
+                android:id="@+id/candidates"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
+
+                <TextView android:id="@+id/cand_0" android:layout_width="60dp" android:layout_height="64dp" style="@style/CandidateButton" />
+                <TextView android:id="@+id/cand_1" android:layout_width="60dp" android:layout_height="64dp" style="@style/CandidateButton" />
+                <TextView android:id="@+id/cand_2" android:layout_width="60dp" android:layout_height="64dp" style="@style/CandidateButton" />
+                <TextView android:id="@+id/cand_3" android:layout_width="60dp" android:layout_height="64dp" style="@style/CandidateButton" />
+                <TextView android:id="@+id/cand_4" android:layout_width="60dp" android:layout_height="64dp" style="@style/CandidateButton" />
+                <TextView android:id="@+id/cand_5" android:layout_width="60dp" android:layout_height="64dp" style="@style/CandidateButton" />
+                <TextView android:id="@+id/cand_6" android:layout_width="60dp" android:layout_height="64dp" style="@style/CandidateButton" />
+                <TextView android:id="@+id/cand_7" android:layout_width="60dp" android:layout_height="64dp" style="@style/CandidateButton" />
+                <TextView android:id="@+id/cand_8" android:layout_width="60dp" android:layout_height="64dp" style="@style/CandidateButton" />
+                <TextView android:id="@+id/cand_9" android:layout_width="60dp" android:layout_height="64dp" style="@style/CandidateButton" />
+            </LinearLayout>
+        </HorizontalScrollView>
+
+        <!-- 主要写字区 -->
+        <com.shiyu.hccr.HandwritingView
+            android:id="@+id/handwriting"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:layout_marginTop="6dp"
+            android:background="@drawable/canvas_bg" />
+
+        <!-- 控制行 -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginTop="6dp"
+            android:gravity="end">
+
+            <Button
+                android:id="@+id/btn_undo"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/btn_undo"
+                android:layout_marginEnd="6dp"
+                android:minHeight="36dp" />
+
+            <Button
+                android:id="@+id/btn_clear"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/btn_clear"
+                android:minHeight="36dp" />
+        </LinearLayout>
     </LinearLayout>
 </LinearLayout>

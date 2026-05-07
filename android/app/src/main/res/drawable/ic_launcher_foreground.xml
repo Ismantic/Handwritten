@@ -4,7 +4,37 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <path
-        android:fillColor="#000000"
-        android:pathData="M30,30 L78,30 M30,54 L78,54 M30,78 L78,78 M54,20 L54,88" />
+
+    <!-- 天线 stem -->
+    <path android:fillColor="#3D5A80"
+        android:pathData="M52,20 L56,20 L56,32 L52,32 Z" />
+    <!-- 天线 ball -->
+    <path android:fillColor="#E74C3C"
+        android:pathData="M54,17 m-4,0 a4,4 0 1,0 8,0 a4,4 0 1,0 -8,0" />
+
+    <!-- 头(圆角矩形,蓝色) -->
+    <path android:fillColor="#5BA9E5"
+        android:pathData="M28,32 L80,32 A8,8 0 0 1 88,40 L88,80 A8,8 0 0 1 80,88 L28,88 A8,8 0 0 1 20,80 L20,40 A8,8 0 0 1 28,32 Z" />
+
+    <!-- 左眼白 + 瞳孔 -->
+    <path android:fillColor="#FFFFFF"
+        android:pathData="M40,52 m-8,0 a8,8 0 1,0 16,0 a8,8 0 1,0 -16,0" />
+    <path android:fillColor="#222222"
+        android:pathData="M40,52 m-3,0 a3,3 0 1,0 6,0 a3,3 0 1,0 -6,0" />
+
+    <!-- 右眼白 + 瞳孔 -->
+    <path android:fillColor="#FFFFFF"
+        android:pathData="M68,52 m-8,0 a8,8 0 1,0 16,0 a8,8 0 1,0 -16,0" />
+    <path android:fillColor="#222222"
+        android:pathData="M68,52 m-3,0 a3,3 0 1,0 6,0 a3,3 0 1,0 -6,0" />
+
+    <!-- 嘴巴 -->
+    <path android:fillColor="#FFFFFF"
+        android:pathData="M42,72 L66,72 L66,76 L42,76 Z" />
+
+    <!-- 笔(右下角,把它画成在写字)-->
+    <path android:fillColor="#8B4513"
+        android:pathData="M82,66 L88,66 L88,82 L82,82 Z" />
+    <path android:fillColor="#222222"
+        android:pathData="M82,80 L88,80 L92,90 L78,90 Z" />
 </vector>
