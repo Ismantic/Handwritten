@@ -42,17 +42,22 @@ public class HandwritingView extends View {
 
     public HandwritingView(Context ctx, AttributeSet attrs) {
         super(ctx, attrs);
-        initPaint(displayPaint);
-        initPaint(renderPaint);
+        // displayPaint:用户视觉,开 AA 看着舒服
+        initPaint(displayPaint, true);
+        // renderPaint:给模型用,★关 AA★ 跟 PIL.ImageDraw.line on L mode 一致(硬二值)。
+        // 之前测过 AA-off + 2x2 bilinear 效果差,但配上现在的 C PIL-bilinear 就对了:
+        //   hard binary → PIL bilinear separable 三角核 → 自然 gray gradient
+        // 跟 Python 同 pipeline。
+        initPaint(renderPaint, false);
         setBackgroundColor(Color.WHITE);
     }
 
-    private static void initPaint(Paint p) {
+    private static void initPaint(Paint p, boolean aa) {
         p.setColor(Color.BLACK);
-        p.setAntiAlias(true);
+        p.setAntiAlias(aa);
         p.setStyle(Paint.Style.STROKE);
-        p.setStrokeCap(Paint.Cap.ROUND);
-        p.setStrokeJoin(Paint.Join.ROUND);
+        p.setStrokeCap(aa ? Paint.Cap.ROUND : Paint.Cap.BUTT);  // PIL line cap 默认 butt
+        p.setStrokeJoin(Paint.Join.ROUND);  // PIL joint='curve' 同 round
     }
 
     @Override
