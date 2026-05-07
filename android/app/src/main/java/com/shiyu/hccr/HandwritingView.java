@@ -34,7 +34,10 @@ public class HandwritingView extends View {
     private float lastX, lastY;
     private StrokeListener listener;
 
-    private static final float STROKE_WIDTH_DP = 8f;
+    // 笔画粗细需要按"缩到 64×64 后还有 ~2-3 px"反推。
+    // 高分屏 1080+ 像素画板,缩 ~20 倍 → 现场粗细要 40-60 px。
+    // 用 dp 不够通用(高 DPI 越细),改用画布宽度比例。
+    private static final float STROKE_RATIO = 0.038f;  // ~画布宽度 4%
 
     public HandwritingView(Context ctx, AttributeSet attrs) {
         super(ctx, attrs);
@@ -43,8 +46,17 @@ public class HandwritingView extends View {
         paint.setStyle(Paint.Style.STROKE);
         paint.setStrokeCap(Paint.Cap.ROUND);
         paint.setStrokeJoin(Paint.Join.ROUND);
-        paint.setStrokeWidth(STROKE_WIDTH_DP * ctx.getResources().getDisplayMetrics().density);
+        // strokeWidth 在 onSizeChanged 里按画布宽度算
+        paint.setStrokeWidth(20f);  // 占位,真值见 onSizeChanged
         setBackgroundColor(Color.WHITE);
+    }
+
+    @Override
+    protected void onSizeChanged(int w, int h, int oldw, int oldh) {
+        super.onSizeChanged(w, h, oldw, oldh);
+        if (w > 0) {
+            paint.setStrokeWidth(w * STROKE_RATIO);
+        }
     }
 
     public void setStrokeListener(StrokeListener l) {

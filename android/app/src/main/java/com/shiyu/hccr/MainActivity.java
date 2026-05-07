@@ -88,6 +88,7 @@ public class MainActivity extends Activity implements HandwritingView.StrokeList
 
     @Override
     public void onStrokeStart() {
+        Log.i(TAG, "onStrokeStart");
         if (pendingRecognize != null) {
             handler.removeCallbacks(pendingRecognize);
             pendingRecognize = null;
@@ -96,6 +97,7 @@ public class MainActivity extends Activity implements HandwritingView.StrokeList
 
     @Override
     public void onStrokeEnd() {
+        Log.i(TAG, "onStrokeEnd, scheduleRecognize");
         scheduleRecognize();
     }
 
@@ -106,19 +108,53 @@ public class MainActivity extends Activity implements HandwritingView.StrokeList
     }
 
     private void recognize() {
+        Log.i(TAG, "recognize() entered");
         pendingRecognize = null;
-        if (recognizer == null) return;
+        if (recognizer == null) {
+            Log.w(TAG, "recognizer is null!");
+            return;
+        }
         if (handwriting.isEmpty()) {
+            Log.i(TAG, "handwriting empty, skip");
             clearCandidates();
             status.setText(R.string.status_empty);
             return;
         }
         try {
             Bitmap bmp = handwriting.renderToBitmap();
+            Log.i(TAG, "bitmap " + bmp.getWidth() + "x" + bmp.getHeight());
             float[] input = preprocessToFloat64x64(bmp);
+            int nonzero = 0;
+            for (float v : input) if (v > 0.01f) nonzero++;
+            Log.i(TAG, "input non-zero pixels: " + nonzero + "/4096");
+
+            // DEBUG:把 64x64 预处理结果存 PNG 到 cache,方便 adb pull 看模型实际输入
+            try {
+                Bitmap preview = Bitmap.createBitmap(64, 64, Bitmap.Config.ARGB_8888);
+                int[] px = new int[64 * 64];
+                for (int i = 0; i < input.length; i++) {
+                    // input 是 stroke=高 / bg=0,翻回来:bg=255 stroke=0 显示
+                    int gray = 255 - Math.round(input[i] * 255);
+                    if (gray < 0) gray = 0;
+                    if (gray > 255) gray = 255;
+                    px[i] = 0xff000000 | (gray << 16) | (gray << 8) | gray;
+                }
+                preview.setPixels(px, 0, 64, 0, 0, 64, 64);
+                java.io.File cacheFile = new java.io.File(getCacheDir(), "last_input.png");
+                try (java.io.FileOutputStream fos = new java.io.FileOutputStream(cacheFile)) {
+                    preview.compress(Bitmap.CompressFormat.PNG, 100, fos);
+                }
+                preview.recycle();
+                Log.i(TAG, "saved preview: " + cacheFile.getAbsolutePath());
+            } catch (Throwable e) {
+                Log.w(TAG, "preview save failed: " + e);
+            }
+
             long t0 = System.nanoTime();
             HCCRRecognizer.Result[] r = recognizer.predict(input, TOPK);
             long ms = (System.nanoTime() - t0) / 1_000_000;
+            Log.i(TAG, "predict OK, n=" + r.length + " ms=" + ms +
+                    (r.length > 0 ? " top1=" + r[0].ch + " " + r[0].prob : ""));
             updateCandidates(r);
             if (r.length > 0) {
                 status.setText(getString(R.string.status_top1, r[0].ch, r[0].prob * 100, ms));
