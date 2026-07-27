@@ -84,17 +84,17 @@ if __name__ == "__main__":
     ap.add_argument(
         "--ncnn-param",
         type=Path,
-        default=Path("save/output/mbv2_aug.int8.ncnn.param"),
+        default=Path("models/mbv2_aug_int8/model.ncnn.param"),
     )
     ap.add_argument(
         "--ncnn-bin",
         type=Path,
-        default=Path("save/output/mbv2_aug.int8.ncnn.bin"),
+        default=Path("models/mbv2_aug_int8/model.ncnn.bin"),
     )
     ap.add_argument(
         "--charset",
         type=Path,
-        default=Path("data/processed/charset.json"),
+        default=Path("models/mbv2_aug_int8/charset.json"),
     )
     ap.add_argument("--k", type=int, default=10)
     args = ap.parse_args()

@@ -2,9 +2,10 @@
 PYTHON ?= python
 ROOT   := ..
 
-NCNN_PARAM   ?= save/output/mbv2_aug.int8.ncnn.param
-NCNN_BIN     ?= save/output/mbv2_aug.int8.ncnn.bin
-CHARSET      ?= data/processed/charset.json
+MODEL_DIR    ?= models/mbv2_aug_int8
+NCNN_PARAM   ?= $(MODEL_DIR)/model.ncnn.param
+NCNN_BIN     ?= $(MODEL_DIR)/model.ncnn.bin
+CHARSET      ?= $(MODEL_DIR)/charset.json
 
 .PHONY: run cli help
 

@@ -12,7 +12,7 @@ INT8_SKIP_LAYERS ?= convclip_0|convdwclip_0
 
 BASE := $(OUT_DIR)/$(NAME)
 
-.PHONY: status trace fp16 int8 benchmark all help
+.PHONY: status trace fp16 int8 benchmark package all help
 
 status:
 	@for f in $(CKPT) $(BASE).ncnn.param $(BASE).int8.ncnn.param; do \
@@ -49,7 +49,13 @@ benchmark: $(BASE).ncnn.param
 	    $(if $(wildcard $(BASE).int8.ncnn.param),--ncnn-int8-param save/$(BASE).int8.ncnn.param --ncnn-int8-bin save/$(BASE).int8.ncnn.bin,) \
 	    --n $(BENCH_N)
 
+package: $(BASE).int8.ncnn.param
+	mkdir -p ../models/$(NAME)_int8
+	cp $(BASE).int8.ncnn.param ../models/$(NAME)_int8/model.ncnn.param
+	cp $(BASE).int8.ncnn.bin ../models/$(NAME)_int8/model.ncnn.bin
+	cp ../data/processed/charset.json ../models/$(NAME)_int8/charset.json
+
 all: trace fp16 int8 benchmark
 
 help:
-	@echo "make -C save status|trace|fp16|int8|benchmark|all"
+	@echo "make -C save status|trace|fp16|int8|benchmark|package|all"

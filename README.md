@@ -4,6 +4,39 @@
 MobileNetV2 在 3755 类 GB2312 一级字上的 top-1 为 95.47%，INT8 模型 4.1 MB，
 移动端推理约 2–5 ms。
 
+## 使用
+
+仓库自带可直接运行的 NCNN INT8 模型，位于
+[`models/mbv2_aug_int8/`](models/mbv2_aug_int8/)，使用 demo 不需要下载
+CASIA 数据，也不需要重新训练。
+
+安装桌面推理依赖：
+
+```bash
+uv pip install numpy Pillow ncnn
+```
+
+识别一张白底黑字图片：
+
+```bash
+make -C demo cli IMG=path/to/image.png
+```
+
+启动 Tkinter 手写板：
+
+```bash
+make -C demo run
+```
+
+两个入口默认加载 `models/mbv2_aug_int8/model.ncnn.{param,bin}` 和同目录的
+`charset.json`。传入其他模型时可覆盖 `MODEL_DIR`：
+
+```bash
+make -C demo run MODEL_DIR=models/other_model
+```
+
+Android APK 的构建与安装见 [`docs/DEPLOY.md`](docs/DEPLOY.md)。
+
 ## 代码分层
 
 ```text
@@ -11,6 +44,7 @@ data/       原始数据状态、解压；不包含可再分发的数据
 prepare/    GNT 解析、字符表、64×64 NumPy 数据集
 src/        模型、Dataset、训练、评测、共享 C 预处理
 save/       PNNX/NCNN 导出、FP16/INT8 量化、基准
+models/     可直接运行和发布的模型包
 demo/       Tkinter 与命令行推理
 android/    Java + JNI + NCNN 独立应用
 test/       单元测试、跨实现一致性、指标复现
@@ -53,15 +87,15 @@ make -C src smoke
 make -C src train RUN_DIR=runs/mbv2
 ```
 
-## 导出与运行
+## 导出
 
 ```bash
 make -C save all RUN_NAME=mbv2 NAME=mbv2
-make -C demo cli IMG=path/to/image.png
-make -C demo run
+make -C save package RUN_NAME=mbv2 NAME=mbv2
 ```
 
-Android 依赖和模型复制步骤见 [`docs/DEPLOY.md`](docs/DEPLOY.md)。
+`runs/` 保存训练 checkpoint，`save/output/` 保存导出过程产物，`models/` 只保存
+经过验证、可供 demo 或发布使用的模型包。
 
 ## 验证
 
