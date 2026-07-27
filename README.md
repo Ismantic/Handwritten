@@ -7,9 +7,9 @@ MobileNetV2 在 3755 类 GB2312 一级字上的 top-1 为 95.47%，INT8 模型 4
 ## 使用
 
 已训练的 PyTorch checkpoint 和 NCNN INT8 模型发布在
-[Hugging Face `Ismantic/Handwritten`](https://huggingface.co/Ismantic/Handwritten)。
-使用 demo 不需要下载 CASIA 数据，也不需要重新训练；Makefile 会在首次运行时
-把模型下载到 gitignored 的 `models/Handwritten/`。
+[`Ismantic/Handwritten`](https://huggingface.co/Ismantic/Handwritten)。
+使用 Demo 不需要下载 CASIA 数据，也不需要重新训练；Makefile 会在首次运行时
+把模型下载到 `models/Handwritten/`。
 
 安装桌面推理依赖：
 
@@ -39,7 +39,7 @@ make -C demo run MODEL_DIR=models/other_model
 
 Android APK 的构建与安装见 [`docs/DEPLOY.md`](docs/DEPLOY.md)。
 
-## 代码分层
+## 代码
 
 ```text
 data/       原始数据状态、解压；不包含可再分发的数据
@@ -56,7 +56,7 @@ docs/       训练、部署和设计理由
 `src/` 不解析 GNT，也不负责模型发布；`prepare/` 只把有许可的本地原始数据转换
 成数值输入；Python 和 Android 均编译 `src/cpp/preprocess.c`，避免预处理漂移。
 
-## 从新克隆开始
+## 训练
 
 环境要求为 Python ≥3.10、PyTorch、C 编译器；Android 另需 JDK 17、SDK 35、
 NDK 和 CMake。建议使用独立虚拟环境：
