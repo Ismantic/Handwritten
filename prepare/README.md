@@ -1,6 +1,6 @@
 # Prepare
 
-本层把授权获得的 GNT 文件转换成训练代码可直接读取的数值数据：
+本目录把授权获得的 GNT 文件转换成训练代码可直接读取的数值数据：
 
 ```text
 data/raw/*.gnt → charset.json → images.npy + labels.npy

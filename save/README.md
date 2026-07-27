@@ -1,6 +1,6 @@
 # Save
 
-本层消费 `runs/<name>/best.pt`，生成 NCNN FP32、FP16 和 INT8 模型，并比较
+本目录消费 `runs/<name>/best.pt`，生成 NCNN FP32、FP16 和 INT8 模型，并比较
 PyTorch/NCNN 的准确率与延迟。
 
 ```bash
