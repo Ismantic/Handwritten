@@ -45,7 +45,8 @@ Python/Java 四空格，Python 使用 `snake_case`，Java 类使用 `PascalCase`
 
 ## 数据与提交
 
-CASIA 数据、`data/npy/`、`runs/`、`save/output/`、Android assets 和构建产物都
+CASIA 数据、`data/npy/`、`runs/`、`save/output/`、`save/releases/`、
+`models/`、Android assets 和构建产物都
 不进 Git。删除 gitignored 目录前先 `du -sh`；它们可能无法从仓库恢复。
 
 提交使用简短、结果导向的中文标题，一次只做一件事，不添加 AI 署名。PR 说明

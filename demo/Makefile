@@ -2,21 +2,26 @@
 PYTHON ?= python
 ROOT   := ..
 
-MODEL_DIR    ?= models/mbv2_aug_int8
-NCNN_PARAM   ?= $(MODEL_DIR)/model.ncnn.param
-NCNN_BIN     ?= $(MODEL_DIR)/model.ncnn.bin
-CHARSET      ?= $(MODEL_DIR)/charset.json
+MODEL_DIR    ?= models/Handwritten
+NCNN_PARAM   ?= $(MODEL_DIR)/ncnn/model.ncnn.param
+NCNN_BIN     ?= $(MODEL_DIR)/ncnn/model.ncnn.bin
+CHARSET      ?= $(MODEL_DIR)/ncnn/charset.json
 
-.PHONY: run cli help
+.PHONY: model run cli help
 
-run:
+model:
+	@if [ ! -f "../$(NCNN_BIN)" ]; then \
+	    $(MAKE) -C ../save download; \
+	fi
+
+run: model
 	cd $(ROOT) && $(PYTHON) -m demo.app \
 	    --ncnn-param $(NCNN_PARAM) \
 	    --ncnn-bin $(NCNN_BIN) \
 	    --charset $(CHARSET)
 
 # CLI 推理(传图片路径,无 GUI),用于无显示环境测试
-cli:
+cli: model
 	@if [ -z "$(IMG)" ]; then echo "用法: make cli IMG=path/to/image.png"; exit 1; fi
 	cd $(ROOT) && $(PYTHON) -m demo.inference \
 	    --image $(IMG) \

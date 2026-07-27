@@ -216,23 +216,23 @@ def main() -> None:
     ap.add_argument(
         "--ncnn-param",
         type=Path,
-        default=Path("models/mbv2_aug_int8/model.ncnn.param"),
+        default=Path("models/Handwritten/ncnn/model.ncnn.param"),
     )
     ap.add_argument(
         "--ncnn-bin",
         type=Path,
-        default=Path("models/mbv2_aug_int8/model.ncnn.bin"),
+        default=Path("models/Handwritten/ncnn/model.ncnn.bin"),
     )
     ap.add_argument(
         "--charset",
         type=Path,
-        default=Path("models/mbv2_aug_int8/charset.json"),
+        default=Path("models/Handwritten/ncnn/charset.json"),
     )
     args = ap.parse_args()
 
     if not args.ncnn_param.exists():
         print(f"模型 param 找不到:{args.ncnn_param}", file=sys.stderr)
-        print("默认模型应位于 `models/mbv2_aug_int8/`", file=sys.stderr)
+        print("先运行 `make -C save download` 下载模型", file=sys.stderr)
         sys.exit(1)
 
     rec = HCCRRecognizer(args.ncnn_param, args.ncnn_bin, args.charset)

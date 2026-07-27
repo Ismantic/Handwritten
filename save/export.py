@@ -1,90 +1,130 @@
-"""把 src.train 训出的 PyTorch checkpoint 转成 NCNN 模型。
+"""把 checkpoint、NCNN 权重和真实推理代码导出成可上传 HF 的目录。
 
-流程:
-  1. 加载 ckpt(runs/<run>/best.pt),按 cfg.model 重建模型
-  2. load_state_dict + eval mode
-  3. torch.jit.trace 用固定输入 shape [1, 1, 64, 64]
-  4. 保存 traced .pt
-  5. 调 pnnx CLI 转成 .ncnn.param / .ncnn.bin
-
-产出:
-  out_dir/<name>.traced.pt
-  out_dir/<name>.ncnn.param
-  out_dir/<name>.ncnn.bin
-  out_dir/<name>.pnnx.param
-  out_dir/<name>.pnnx.bin
-  out_dir/<name>_pnnx.py
-  out_dir/<name>_ncnn.py
+    python -m save.export                    # 导出全部发布
+    python -m save.export Handwritten        # 导出单个
+    python -m save.export --code-only        # 只刷新代码、模型卡和 metadata
+    python -m save.export --list
 """
 
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
+import shutil
+import sys
 from pathlib import Path
 
-import pnnx
-import torch
+from save import cards
+from save.releases import RELEASES
 
-from src.models import build_model
+ROOT = Path(__file__).resolve().parents[1]
+SAVE = Path(__file__).resolve().parent
+ASSETS = SAVE / "assets"
+DEFAULT_OUT = SAVE / "releases"
+
+
+def _copy(source: Path, destination: Path) -> None:
+    if not source.exists():
+        sys.exit(f"缺少发布源文件:{source}")
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(source, destination)
+
+
+def _sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _clean(out: Path) -> None:
+    for cache in out.rglob("__pycache__"):
+        shutil.rmtree(cache, ignore_errors=True)
+
+
+def _copy_code(out: Path) -> None:
+    _copy(ROOT / "src/models.py", out / "model.py")
+    _copy(ROOT / "src/normalize.py", out / "normalize.py")
+    _copy(ASSETS / "inference.py", out / "inference.py")
+    _copy(ASSETS / "example.py", out / "example.py")
+
+
+def export_release(name: str, spec: dict, out_root: Path, code_only: bool) -> Path:
+    out = out_root / name
+    out.mkdir(parents=True, exist_ok=True)
+    checkpoint = ROOT / spec["checkpoint"]
+    ncnn_param = ROOT / spec["ncnn_param"]
+    ncnn_bin = ROOT / spec["ncnn_bin"]
+    charset = ROOT / spec["charset"]
+
+    if not code_only:
+        _copy(checkpoint, out / "best.pt")
+        _copy(ncnn_param, out / "ncnn/model.ncnn.param")
+        _copy(ncnn_bin, out / "ncnn/model.ncnn.bin")
+        _copy(charset, out / "ncnn/charset.json")
+    elif not (out / "best.pt").exists():
+        sys.exit(f"{out} 尚未完整导出,--code-only 无法刷新")
+
+    _copy_code(out)
+    (out / "README.md").write_text(cards.model_card(name, spec), encoding="utf-8")
+
+    published = [
+        "best.pt",
+        "ncnn/model.ncnn.param",
+        "ncnn/model.ncnn.bin",
+        "ncnn/charset.json",
+    ]
+    missing = [relative for relative in published if not (out / relative).exists()]
+    if missing:
+        sys.exit(f"{out} 缺少发布权重:{missing}")
+    metadata = {
+        "name": name,
+        "source_checkpoint": spec["checkpoint"],
+        "source_ncnn_param": spec["ncnn_param"],
+        "source_ncnn_bin": spec["ncnn_bin"],
+        "source_charset": spec["charset"],
+        "model": spec["model"],
+        "classes": spec["classes"],
+        "metrics": spec["metrics"],
+        "sha256": {relative: _sha256(out / relative) for relative in published},
+    }
+    (out / "release_metadata.json").write_text(
+        json.dumps(metadata, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    _clean(out)
+    return out
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--ckpt", type=Path, required=True, help="path to best.pt / latest.pt")
-    ap.add_argument("--out-dir", type=Path, required=True)
-    ap.add_argument("--name", type=str, required=True, help="basename for output files")
-    ap.add_argument("--input-shape", type=str, default="1,1,64,64")
-    ap.add_argument("--fp16", action="store_true", help="pnnx fp16 模式(默认 FP32)")
-    args = ap.parse_args()
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("names", nargs="*")
+    parser.add_argument("--out", type=Path, default=DEFAULT_OUT)
+    parser.add_argument("--code-only", action="store_true")
+    parser.add_argument("--list", action="store_true")
+    args = parser.parse_args()
 
-    args.out_dir.mkdir(parents=True, exist_ok=True)
+    if args.list:
+        for name, spec in RELEASES.items():
+            checkpoint = ROOT / spec["checkpoint"]
+            exported = args.out / name / "best.pt"
+            print(
+                f"{'✓' if checkpoint.exists() else '✗'} source  "
+                f"{'✓' if exported.exists() else '✗'} release  {name}"
+            )
+        return
 
-    print(f"[export] 加载 ckpt: {args.ckpt}", flush=True)
-    ck = torch.load(args.ckpt, map_location="cpu", weights_only=False)
-    cfg = ck.get("cfg", {})
-    model_name = cfg.get("model", "mobilenet_v2")
-    print(f"[export] model: {model_name}, ckpt epoch: {ck.get('epoch')}, "
-          f"acc1: {ck.get('acc1', 'n/a')}")
-
-    # 类数从 charset 推断,但这里偷懒用 ckpt 的 classifier 输出维度
-    sd = ck["model"]
-    # 找最后一个 Linear 层的 out_features
-    classifier_keys = [k for k in sd if k.endswith("classifier.weight") or k.endswith(".1.weight")]
-    classifier_keys = [k for k in classifier_keys if "classifier" in k]
-    num_classes = sd[classifier_keys[-1]].shape[0] if classifier_keys else 3755
-    print(f"[export] num_classes: {num_classes}")
-
-    model = build_model(model_name, num_classes)
-    model.load_state_dict(sd)
-    model.eval()
-
-    shape = tuple(int(x) for x in args.input_shape.split(","))
-    example = torch.randn(*shape)
-
-    # pnnx.export 内部做 trace + convert,一步到位
-    base = args.out_dir / args.name
-    traced_path = f"{base}.traced.pt"
-    print(f"[export] pnnx.export → {base}.ncnn.param/bin (fp16={args.fp16})", flush=True)
-    pnnx.export(
-        model,
-        ptpath=traced_path,
-        inputs=example,
-        pnnxparam=f"{base}.pnnx.param",
-        pnnxbin=f"{base}.pnnx.bin",
-        pnnxpy=f"{base}_pnnx.py",
-        ncnnparam=f"{base}.ncnn.param",
-        ncnnbin=f"{base}.ncnn.bin",
-        ncnnpy=f"{base}_ncnn.py",
-        fp16=args.fp16,
-    )
-    print("[export] OK")
-
-    # 整理产物 size
-    print("\n[export] 产出文件:")
-    for f in sorted(args.out_dir.glob(f"{args.name}*")):
-        size_mb = f.stat().st_size / 1e6
-        print(f"  {f.name:40s}  {size_mb:6.2f} MB")
+    names = args.names or list(RELEASES)
+    unknown = [name for name in names if name not in RELEASES]
+    if unknown:
+        sys.exit(f"未知发布名:{unknown};可用:{list(RELEASES)}")
+    for name in names:
+        out = export_release(name, RELEASES[name], args.out, args.code_only)
+        size = sum(path.stat().st_size for path in out.rglob("*") if path.is_file())
+        action = "刷新代码" if args.code_only else "导出"
+        print(f"✓ {name} {action} → {out} ({size / 1e6:.1f} MB)")
 
 
 if __name__ == "__main__":

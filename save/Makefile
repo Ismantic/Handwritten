@@ -1,7 +1,8 @@
--include ../local.mk
+HERE := $(patsubst %/,%,$(dir $(abspath $(lastword $(MAKEFILE_LIST)))))
+ROOT := $(patsubst %/,%,$(dir $(HERE)))
 
-PYTHON ?= python
-ROOT := ..
+-include $(ROOT)/local.mk
+PYTHON ?= $(if $(VIRTUAL_ENV),$(VIRTUAL_ENV)/bin/python,python3)
 RUN_NAME ?= mbv2_phase1_aug
 CKPT ?= ../runs/$(RUN_NAME)/best.pt
 NAME ?= mbv2_aug
@@ -12,23 +13,27 @@ INT8_SKIP_LAYERS ?= convclip_0|convdwclip_0
 
 BASE := $(OUT_DIR)/$(NAME)
 
-.PHONY: status trace fp16 int8 benchmark package all help
+.PHONY: status download trace fp16 int8 benchmark all export code verify dry-run upload upload-code help
 
 status:
 	@for f in $(CKPT) $(BASE).ncnn.param $(BASE).int8.ncnn.param; do \
 	    if test -f "$$f"; then echo "[ok]      $$f"; else echo "[missing] $$f"; fi; \
 	done
+	@cd $(ROOT) && $(PYTHON) -m save.export --list
+
+download:
+	hf download Ismantic/Handwritten --local-dir $(ROOT)/models/Handwritten
 
 trace: $(BASE).ncnn.param
 
-$(BASE).ncnn.param: export.py $(CKPT)
-	cd $(ROOT) && $(PYTHON) -m save.export --ckpt save/$(CKPT) \
+$(BASE).ncnn.param: convert.py $(CKPT)
+	cd $(ROOT) && $(PYTHON) -m save.convert --ckpt save/$(CKPT) \
 	    --out-dir save/$(OUT_DIR) --name $(NAME)
 
 fp16: $(BASE).fp16.ncnn.param
 
-$(BASE).fp16.ncnn.param: export.py $(CKPT)
-	cd $(ROOT) && $(PYTHON) -m save.export --ckpt save/$(CKPT) \
+$(BASE).fp16.ncnn.param: convert.py $(CKPT)
+	cd $(ROOT) && $(PYTHON) -m save.convert --ckpt save/$(CKPT) \
 	    --out-dir save/$(OUT_DIR) --name $(NAME).fp16 --fp16
 
 $(BASE).calib_list.txt:
@@ -49,13 +54,34 @@ benchmark: $(BASE).ncnn.param
 	    $(if $(wildcard $(BASE).int8.ncnn.param),--ncnn-int8-param save/$(BASE).int8.ncnn.param --ncnn-int8-bin save/$(BASE).int8.ncnn.bin,) \
 	    --n $(BENCH_N)
 
-package: $(BASE).int8.ncnn.param
-	mkdir -p ../models/$(NAME)_int8
-	cp $(BASE).int8.ncnn.param ../models/$(NAME)_int8/model.ncnn.param
-	cp $(BASE).int8.ncnn.bin ../models/$(NAME)_int8/model.ncnn.bin
-	cp ../data/processed/charset.json ../models/$(NAME)_int8/charset.json
-
 all: trace fp16 int8 benchmark
 
+# ---------------------------------------------------------------- HF 发布
+
+NS ?= Ismantic
+RELEASE ?= Handwritten
+CODE_ONLY ?= 0
+
+export:
+	cd $(ROOT) && $(PYTHON) -m save.export $(RELEASE)
+
+code:
+	cd $(ROOT) && $(PYTHON) -m save.export --code-only $(RELEASE)
+
+verify:
+	cd $(ROOT) && $(PYTHON) -m unittest test.test_save -v
+
+dry-run:
+	cd $(ROOT) && $(PYTHON) -m save.upload --namespace $(NS) --dry-run \
+	    $(if $(filter 1,$(CODE_ONLY)),--code-only,) $(RELEASE)
+
+upload: verify
+	cd $(ROOT) && $(PYTHON) -m save.upload --namespace $(NS) $(RELEASE)
+
+upload-code: verify
+	cd $(ROOT) && $(PYTHON) -m save.upload --namespace $(NS) --code-only $(RELEASE)
+
 help:
-	@echo "make -C save status|trace|fp16|int8|benchmark|package|all"
+	@echo "模型: make -C save download"
+	@echo "NCNN: make -C save status|trace|fp16|int8|benchmark|all"
+	@echo "HF:   make -C save export|code|verify|dry-run|upload|upload-code"

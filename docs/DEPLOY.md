@@ -13,9 +13,10 @@
 `android/third_party/ncnn-android/`，再复制模型和字符表：
 
 ```bash
-cp models/mbv2_aug_int8/model.ncnn.param android/app/src/main/assets/mbv2_aug.int8.ncnn.param
-cp models/mbv2_aug_int8/model.ncnn.bin android/app/src/main/assets/mbv2_aug.int8.ncnn.bin
-cp models/mbv2_aug_int8/charset.json android/app/src/main/assets/charset.json
+make -C save download
+cp models/Handwritten/ncnn/model.ncnn.param android/app/src/main/assets/mbv2_aug.int8.ncnn.param
+cp models/Handwritten/ncnn/model.ncnn.bin android/app/src/main/assets/mbv2_aug.int8.ncnn.bin
+cp models/Handwritten/ncnn/charset.json android/app/src/main/assets/charset.json
 cd android && ./gradlew assembleDebug
 ```
 

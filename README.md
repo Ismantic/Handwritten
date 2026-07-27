@@ -6,9 +6,10 @@ MobileNetV2 在 3755 类 GB2312 一级字上的 top-1 为 95.47%，INT8 模型 4
 
 ## 使用
 
-仓库自带可直接运行的 NCNN INT8 模型，位于
-[`models/mbv2_aug_int8/`](models/mbv2_aug_int8/)，使用 demo 不需要下载
-CASIA 数据，也不需要重新训练。
+已训练的 PyTorch checkpoint 和 NCNN INT8 模型发布在
+[Hugging Face `Ismantic/Handwritten`](https://huggingface.co/Ismantic/Handwritten)。
+使用 demo 不需要下载 CASIA 数据，也不需要重新训练；Makefile 会在首次运行时
+把模型下载到 gitignored 的 `models/Handwritten/`。
 
 安装桌面推理依赖：
 
@@ -28,10 +29,11 @@ make -C demo cli IMG=path/to/image.png
 make -C demo run
 ```
 
-两个入口默认加载 `models/mbv2_aug_int8/model.ncnn.{param,bin}` 和同目录的
-`charset.json`。传入其他模型时可覆盖 `MODEL_DIR`：
+两个入口默认加载 `models/Handwritten/ncnn/model.ncnn.{param,bin}` 和同目录的
+`charset.json`。也可以提前下载，或覆盖 `MODEL_DIR`：
 
 ```bash
+make -C save download
 make -C demo run MODEL_DIR=models/other_model
 ```
 
@@ -44,7 +46,7 @@ data/       原始数据状态、解压；不包含可再分发的数据
 prepare/    GNT 解析、字符表、64×64 NumPy 数据集
 src/        模型、Dataset、训练、评测、共享 C 预处理
 save/       PNNX/NCNN 导出、FP16/INT8 量化、基准
-models/     可直接运行和发布的模型包
+models/     从 Hugging Face 下载的本地模型缓存
 demo/       Tkinter 与命令行推理
 android/    Java + JNI + NCNN 独立应用
 test/       单元测试、跨实现一致性、指标复现
@@ -91,11 +93,14 @@ make -C src train RUN_DIR=runs/mbv2
 
 ```bash
 make -C save all RUN_NAME=mbv2 NAME=mbv2
-make -C save package RUN_NAME=mbv2 NAME=mbv2
+make -C save export
+make -C save verify
+make -C save upload
 ```
 
-`runs/` 保存训练 checkpoint，`save/output/` 保存导出过程产物，`models/` 只保存
-经过验证、可供 demo 或发布使用的模型包。
+`runs/` 保存训练 checkpoint，`save/output/` 保存转换产物，
+`save/releases/Handwritten/` 是上传前的自包含发布包。正式发布源在 Hugging
+Face，`models/` 只保存下载缓存。
 
 ## 验证
 
