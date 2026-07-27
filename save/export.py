@@ -1,4 +1,4 @@
-"""把 fit/ 训出的 PyTorch ckpt 转 NCNN(FP32)。
+"""把 src.train 训出的 PyTorch checkpoint 转成 NCNN 模型。
 
 流程:
   1. 加载 ckpt(runs/<run>/best.pt),按 cfg.model 重建模型
@@ -26,7 +26,7 @@ from pathlib import Path
 import pnnx
 import torch
 
-from common.models import build_model
+from src.models import build_model
 
 
 def main() -> None:

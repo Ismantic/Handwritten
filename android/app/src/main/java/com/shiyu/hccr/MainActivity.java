@@ -167,7 +167,7 @@ public class MainActivity extends Activity implements HandwritingView.StrokeList
 
     /**
      * Bitmap (RGBA) → float[64*64]。Java 端只做 ARGB → 灰度,
-     * 后面的 bbox / bilinear / 翻转 / 归一化全部走 ★common/cpp/preprocess.c★
+     * 后面的 bbox / bilinear / 翻转 / 归一化全部走 ★src/cpp/preprocess.c★
      * (跟 Python ctypes 同一份源码,字节级一致)。
      */
     private float[] preprocessToFloat64x64(Bitmap src) {

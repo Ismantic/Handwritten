@@ -19,8 +19,10 @@ import sys
 import time
 
 # 训练长跑,redirect 到文件时默认块缓冲会让我们看不到进度。强制 line buffering。
-sys.stdout.reconfigure(line_buffering=True)
-sys.stderr.reconfigure(line_buffering=True)
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(line_buffering=True)
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(line_buffering=True)
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
@@ -29,9 +31,9 @@ import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader, Subset
 
-from common.charset import Charset
-from common.dataset import HWDBDataset
-from common.models import build_model, count_params
+from src.charset import Charset
+from src.dataset import HWDBDataset
+from src.models import build_model, count_params
 
 
 @dataclass
@@ -60,6 +62,8 @@ class TrainConfig:
 
     out_dir: str = "runs/baseline"
     log_every: int = 50
+    max_train_steps: int = 0
+    max_eval_batches: int = 0
 
 
 def set_seed(seed: int) -> None:
@@ -102,12 +106,13 @@ def make_loaders(cfg: TrainConfig) -> tuple[DataLoader, DataLoader, Charset]:
     # 内存紧时 num_workers > 0 用默认 fork 会 OOM(父进程大,fork 复制开销高)。
     # 用 spawn 启个干净的 Python 子进程,内存占用 ~500MB 而非父进程 GB 级。
     mp_ctx = "spawn" if cfg.num_workers > 0 else None
+    pin_memory = torch.cuda.is_available()
     train_loader = DataLoader(
         train_ds,
         batch_size=cfg.batch_size,
         shuffle=True,
         num_workers=cfg.num_workers,
-        pin_memory=True,
+        pin_memory=pin_memory,
         drop_last=True,
         persistent_workers=cfg.num_workers > 0,
         multiprocessing_context=mp_ctx,
@@ -117,7 +122,7 @@ def make_loaders(cfg: TrainConfig) -> tuple[DataLoader, DataLoader, Charset]:
         batch_size=cfg.batch_size * 2,
         shuffle=False,
         num_workers=cfg.num_workers,
-        pin_memory=True,
+        pin_memory=pin_memory,
         persistent_workers=cfg.num_workers > 0,
         multiprocessing_context=mp_ctx,
     )
@@ -139,10 +144,15 @@ def cosine_warmup_lr(
 
 
 @torch.no_grad()
-def evaluate(model: nn.Module, loader: DataLoader, device: torch.device) -> tuple[float, float, float]:
+def evaluate(
+    model: nn.Module,
+    loader: DataLoader,
+    device: torch.device,
+    max_batches: int = 0,
+) -> tuple[float, float, float]:
     model.eval()
     correct1 = correct5 = correct10 = total = 0
-    for x, y in loader:
+    for batch_idx, (x, y) in enumerate(loader):
         x = x.to(device, non_blocking=True)
         y = y.to(device, non_blocking=True)
         logits = model(x)
@@ -153,6 +163,8 @@ def evaluate(model: nn.Module, loader: DataLoader, device: torch.device) -> tupl
         correct5 += hits[:, :5].any(1).sum().item()
         correct10 += hits[:, :10].any(1).sum().item()
         total += y.size(0)
+        if max_batches and batch_idx + 1 >= max_batches:
+            break
     return correct1 / total, correct5 / total, correct10 / total
 
 
@@ -214,6 +226,9 @@ def train_one_epoch(
                 f"[epoch {epoch} {it+1}/{n_batches}] loss={avg:.4f} lr={lr:.2e} "
                 f"{it_per_s:.1f} it/s elapsed={elapsed:.1f}s"
             )
+        if cfg.max_train_steps and it + 1 >= cfg.max_train_steps:
+            print(f"[train] max_train_steps={cfg.max_train_steps},提前结束本 epoch")
+            break
     return global_step
 
 
@@ -252,8 +267,9 @@ def main() -> None:
     criterion = nn.CrossEntropyLoss(label_smoothing=cfg.label_smoothing)
     scaler = torch.amp.GradScaler("cuda") if (cfg.amp and device.type == "cuda") else None
 
-    total_steps = len(train_loader) * cfg.epochs
-    warmup_steps = len(train_loader) * min(cfg.warmup_epochs, cfg.epochs)
+    steps_per_epoch = min(len(train_loader), cfg.max_train_steps or len(train_loader))
+    total_steps = steps_per_epoch * cfg.epochs
+    warmup_steps = steps_per_epoch * min(cfg.warmup_epochs, cfg.epochs)
 
     global_step = 0
     best_acc = 0.0
@@ -262,14 +278,16 @@ def main() -> None:
             model, train_loader, optimizer, criterion, scaler, device,
             epoch, cfg, global_step, total_steps, warmup_steps,
         )
-        acc1, acc5, acc10 = evaluate(model, test_loader, device)
+        acc1, acc5, acc10 = evaluate(
+            model, test_loader, device, max_batches=cfg.max_eval_batches
+        )
         print(f"[eval] epoch {epoch}: top1={acc1:.4f} top5={acc5:.4f} top10={acc10:.4f}")
 
         torch.save(
             {"model": model.state_dict(), "epoch": epoch, "acc1": acc1, "cfg": asdict(cfg)},
             out_dir / "latest.pt",
         )
-        if acc1 > best_acc:
+        if epoch == 0 or acc1 > best_acc:
             best_acc = acc1
             torch.save(
                 {"model": model.state_dict(), "epoch": epoch, "acc1": acc1, "cfg": asdict(cfg)},

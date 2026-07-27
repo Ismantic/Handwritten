@@ -216,12 +216,12 @@ def main() -> None:
     ap.add_argument(
         "--ncnn-param",
         type=Path,
-        default=Path("export/output/mbv2_aug.int8.ncnn.param"),
+        default=Path("save/output/mbv2_aug.int8.ncnn.param"),
     )
     ap.add_argument(
         "--ncnn-bin",
         type=Path,
-        default=Path("export/output/mbv2_aug.int8.ncnn.bin"),
+        default=Path("save/output/mbv2_aug.int8.ncnn.bin"),
     )
     ap.add_argument(
         "--charset",
@@ -232,7 +232,7 @@ def main() -> None:
 
     if not args.ncnn_param.exists():
         print(f"模型 param 找不到:{args.ncnn_param}", file=sys.stderr)
-        print("先跑 `make -C export all` 生成 NCNN 模型", file=sys.stderr)
+        print("先跑 `make -C save all` 生成 NCNN 模型", file=sys.stderr)
         sys.exit(1)
 
     rec = HCCRRecognizer(args.ncnn_param, args.ncnn_bin, args.charset)

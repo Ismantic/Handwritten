@@ -13,13 +13,11 @@ from __future__ import annotations
 import argparse
 import collections
 import json
-import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent))
-from gnt_parser import iter_gnt_dir  # noqa: E402
+from prepare.gnt_parser import iter_gnt_dir
 
-from tqdm import tqdm  # noqa: E402
+from tqdm import tqdm
 
 
 def is_gb2312_level1(char: str) -> bool:

@@ -1,0 +1,2 @@
+# Copy to local.mk for machine-specific overrides. local.mk is ignored by git.
+PYTHON := /path/to/venv/bin/python

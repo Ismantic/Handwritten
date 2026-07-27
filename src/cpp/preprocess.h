@@ -1,7 +1,7 @@
 /* HCCR 预处理 —— 单一 C 实现,Python (ctypes) 和 Android (JNI) 共用,
  * 保证训练 / Python demo / Android 三端字节级一致。
  *
- * 算法(跟 common/normalize.py 等价,跟 PIL.Image.BILINEAR 同口径):
+ * 算法(跟 src/normalize.py 等价,跟 PIL.Image.BILINEAR 同口径):
  *   1. 输入灰度图 (uint8, 255=白底, 0=黑笔画)
  *   2. 找前景 bbox(像素 < 220)
  *   3. 裁切 bbox,长边等比缩到 56,separable 三角核 bilinear(同 PIL)

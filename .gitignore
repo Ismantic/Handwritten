@@ -234,6 +234,10 @@ fit/runs/
 
 # 模型导出产物(.pt / .ncnn / .onnx 等,从 ckpt 重建即可)
 export/output/
+save/output/
+
+# 本机 Python/工具链覆盖,模板见 local.mk.example
+local.mk
 
 # Android 构建产物 + 本地配置 + 第三方库
 android/.gradle/

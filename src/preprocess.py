@@ -1,9 +1,9 @@
-"""HCCR preprocess —— ctypes wrapper for ``common/cpp/libhccr_preprocess.so``。
+"""HCCR preprocess —— ctypes wrapper for ``src/cpp/libhccr_preprocess.so``。
 
-跟 Android JNI 共用同一份 C 实现(``common/cpp/preprocess.{h,c}``)。
+跟 Android JNI 共用同一份 C 实现(``src/cpp/preprocess.{h,c}``)。
 保证训练 / Python demo / Android 三端字节级对齐。
 
-替换原来的 ``common.normalize.normalize`` —— 那个是纯 Python + PIL.Image.BILINEAR,
+替换原来的 ``src.normalize.normalize`` —— 那个是纯 Python + PIL.Image.BILINEAR,
 现在改用 C 版本(算法字节一致,Python 调用通过 ctypes,Android 调用通过 JNI)。
 """
 
@@ -48,7 +48,7 @@ _lib.hccr_preprocess.restype = ctypes.c_int
 def preprocess(gray: np.ndarray) -> np.ndarray:
     """灰度图 (任意尺寸 uint8, 255=白底 0=黑笔画) → float32 [1, 64, 64] 模型输入。
 
-    跟 ``common.normalize.normalize`` + 后续 ``(255 - x) / 255`` 等价(且字节级一致)。
+    跟 ``src.normalize.normalize`` + 后续 ``(255 - x) / 255`` 等价(且字节级一致)。
     """
     if gray.dtype != np.uint8:
         gray = gray.astype(np.uint8)

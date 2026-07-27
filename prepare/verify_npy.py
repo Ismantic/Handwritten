@@ -14,7 +14,7 @@ from pathlib import Path
 
 import numpy as np
 
-from common.normalize import CANVAS_SIZE
+from src.normalize import CANVAS_SIZE
 
 import matplotlib
 matplotlib.use("Agg")  # noqa: E402

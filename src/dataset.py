@@ -1,6 +1,6 @@
 """HWDB 数据集 PyTorch 接口。
 
-读 data/npy/{train,test}/{images,labels}.npy(由 data/scripts/build_npy.py 生成)。
+读 data/npy/{train,test}/{images,labels}.npy(由 prepare/build_npy.py 生成)。
 
 约定:
   - 原始 npy 是 uint8,白底黑字(255=白底,0=黑笔画)

@@ -23,9 +23,9 @@ import numpy as np
 import torch
 import ncnn
 
-from common.charset import Charset
-from common.dataset import HWDBDataset
-from common.models import build_model
+from src.charset import Charset
+from src.dataset import HWDBDataset
+from src.models import build_model
 
 
 def main() -> None:

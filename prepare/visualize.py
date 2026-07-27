@@ -12,13 +12,11 @@ import argparse
 import json
 import math
 import random
-import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent))
-from gnt_parser import iter_gnt_dir  # noqa: E402
+from prepare.gnt_parser import iter_gnt_dir
 
-from common.normalize import normalize
+from src.normalize import normalize
 
 import matplotlib
 matplotlib.use("Agg")  # noqa: E402

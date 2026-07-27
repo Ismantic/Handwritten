@@ -12,16 +12,14 @@ from __future__ import annotations
 
 import argparse
 import json
-import sys
 from pathlib import Path
 
 import numpy as np
 from tqdm import tqdm
 
-sys.path.insert(0, str(Path(__file__).parent))
-from gnt_parser import iter_gnt_dir, iter_gnt_dir_labels  # noqa: E402
+from prepare.gnt_parser import iter_gnt_dir, iter_gnt_dir_labels
 
-from common.normalize import normalize, CANVAS_SIZE
+from src.normalize import normalize, CANVAS_SIZE
 
 
 def main() -> None:

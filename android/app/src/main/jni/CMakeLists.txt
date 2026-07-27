@@ -15,13 +15,13 @@ set(ncnn_DIR ${NCNN_ROOT}/lib/cmake/ncnn)
 find_package(ncnn REQUIRED)
 
 # 共享预处理 C 实现(跟 Python 端 ctypes 加载的同一份源码)
-set(HCCR_COMMON_CPP ${CMAKE_CURRENT_LIST_DIR}/../../../../../common/cpp)
+set(HCCR_CORE_CPP ${CMAKE_CURRENT_LIST_DIR}/../../../../../src/cpp)
 
 add_library(hccr_jni SHARED
     hccr_jni.cc
-    ${HCCR_COMMON_CPP}/preprocess.c
+    ${HCCR_CORE_CPP}/preprocess.c
 )
-target_include_directories(hccr_jni PRIVATE ${HCCR_COMMON_CPP})
+target_include_directories(hccr_jni PRIVATE ${HCCR_CORE_CPP})
 target_link_libraries(hccr_jni
     PRIVATE
         ncnn

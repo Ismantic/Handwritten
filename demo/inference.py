@@ -1,10 +1,10 @@
 """HCCR 推理封装(NCNN backend)。
 
-复用训练时的归一化逻辑(common.normalize),保证 demo 输入跟训练分布一致。
+复用训练时的归一化逻辑(src.normalize),保证 demo 输入跟训练分布一致。
 
 预处理流水线:
   rendered_canvas (PIL grayscale, 任意尺寸,255=白底 0=黑笔)
-    → common.normalize.normalize  (找前景外接矩形 → 长边 56 → 居中放 64×64)
+    → src.normalize.normalize  (找前景外接矩形 → 长边 56 → 居中放 64×64)
     → uint8 [64, 64], 仍是 255=白底
     → (255 - x) / 255  → float32 [1, 64, 64], stroke=高 (跟 dataset.py 一致)
     → NCNN forward
@@ -19,7 +19,7 @@ import ncnn
 import numpy as np
 from PIL import Image
 
-from common.normalize import normalize
+from src.normalize import normalize
 
 
 class HCCRRecognizer:
@@ -84,12 +84,12 @@ if __name__ == "__main__":
     ap.add_argument(
         "--ncnn-param",
         type=Path,
-        default=Path("export/output/mbv2_aug.int8.ncnn.param"),
+        default=Path("save/output/mbv2_aug.int8.ncnn.param"),
     )
     ap.add_argument(
         "--ncnn-bin",
         type=Path,
-        default=Path("export/output/mbv2_aug.int8.ncnn.bin"),
+        default=Path("save/output/mbv2_aug.int8.ncnn.bin"),
     )
     ap.add_argument(
         "--charset",

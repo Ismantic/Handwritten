@@ -1,6 +1,6 @@
 """字符表加载/反查。
 
-charset.json 由 data/scripts/build_charset.py 生成,结构见那边。这里只负责加载和
+charset.json 由 prepare/build_charset.py 生成,结构见那边。这里只负责加载和
 提供快速 char ↔ index 映射,以及 num_classes(模型分类头维度从这取)。
 """
 
