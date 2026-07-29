@@ -4,6 +4,17 @@
 MobileNetV2 在 3755 类 GB2312 一级字上的 top-1 为 95.47%，INT8 模型 4.1 MB，
 移动端推理约 2–5 ms。
 
+## Android 应用
+
+Android 端支持在画布上手写汉字，并实时显示 top-1 置信度、候选字符和推理耗时。
+
+<p align="center">
+  <img src="docs/assets/android-recognition-yuan.jpg" alt="Android 应用识别手写汉字“源”" width="320">
+  <img src="docs/assets/android-recognition-jing.jpg" alt="Android 应用识别手写汉字“京”" width="320">
+</p>
+
+APK 的构建、安装和模型部署说明见 [`docs/DEPLOY.md`](docs/DEPLOY.md)。
+
 ## 使用
 
 已训练的 PyTorch checkpoint 和 NCNN INT8 模型发布在
