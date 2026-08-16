@@ -1,7 +1,7 @@
 # Handwritten
 
 端到端手写汉字识别：**CASIA HWDB1.1 → PyTorch → NCNN INT8 → Android**。
-MobileNetV2 在 3755 类 GB2312 一级字上的 top-1 为 95.47%，INT8 模型 4.1 MB，
+MobileNetV2 在 3755 类 GB2312 一级字上的 Top-1 为 95.47%，INT8 模型 4.1 MB，
 移动端推理约 2–5 ms。
 
 ## Android 应用
