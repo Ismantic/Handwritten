@@ -1,5 +1,17 @@
+import java.io.File
+import java.util.Properties
+
 plugins {
     id("com.android.application")
+}
+
+val keystorePropertiesFile = project.findProperty("releaseKeystoreProperties")?.let {
+    file(it.toString())
+} ?: rootProject.file("keystore.properties")
+val keystoreProperties = Properties().apply {
+    if (keystorePropertiesFile.exists()) {
+        keystorePropertiesFile.inputStream().use { load(it) }
+    }
 }
 
 android {
@@ -32,6 +44,17 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            val storeFilePath = keystoreProperties.getProperty("storeFile")
+            if (storeFilePath != null) {
+                signingConfig = signingConfigs.create("release") {
+                    val configuredFile = File(storeFilePath)
+                    storeFile = if (configuredFile.isAbsolute) configuredFile
+                                else File(keystorePropertiesFile.parentFile, storeFilePath)
+                    storePassword = keystoreProperties.getProperty("storePassword")
+                    keyAlias = keystoreProperties.getProperty("keyAlias")
+                    keyPassword = keystoreProperties.getProperty("keyPassword")
+                }
+            }
         }
     }
 

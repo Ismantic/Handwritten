@@ -247,6 +247,7 @@ android/build/
 android/app/build/
 android/app/.cxx/
 android/local.properties
+android/keystore.properties
 android/third_party/
 android/app/src/main/assets/*.ncnn.*
 android/app/src/main/assets/charset.json
