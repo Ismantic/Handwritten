@@ -71,6 +71,10 @@ android {
     }
 
     ndkVersion = "30.0.14904198"
+
+    sourceSets {
+        getByName("main").java.srcDir("../runtime/src/main/java")
+    }
 }
 
 dependencies {

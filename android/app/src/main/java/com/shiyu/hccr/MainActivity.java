@@ -13,6 +13,8 @@ import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import com.shiyu.handwritten.runtime.HCCRRecognizer;
+
 import java.io.IOException;
 
 public class MainActivity extends Activity implements HandwritingView.StrokeListener {
@@ -71,6 +73,7 @@ public class MainActivity extends Activity implements HandwritingView.StrokeList
 
         // 加载模型
         try {
+            HCCRRecognizer.loadNativeLibrary("hccr_jni");
             recognizer = new HCCRRecognizer(getAssets(), NCNN_PARAM, NCNN_BIN, CHARSET);
             status.setText(R.string.status_ready);
         } catch (IOException e) {
@@ -154,10 +157,10 @@ public class MainActivity extends Activity implements HandwritingView.StrokeList
             HCCRRecognizer.Result[] r = recognizer.predict(input, TOPK);
             long ms = (System.nanoTime() - t0) / 1_000_000;
             Log.i(TAG, "predict OK, n=" + r.length + " ms=" + ms +
-                    (r.length > 0 ? " top1=" + r[0].ch + " " + r[0].prob : ""));
+                    (r.length > 0 ? " top1=" + r[0].text + " " + r[0].probability : ""));
             updateCandidates(r);
             if (r.length > 0) {
-                status.setText(getString(R.string.status_top1, r[0].ch, r[0].prob * 100, ms));
+                status.setText(getString(R.string.status_top1, r[0].text, r[0].probability * 100, ms));
             }
         } catch (Throwable e) {
             Log.e(TAG, "recognize failed", e);
@@ -192,7 +195,7 @@ public class MainActivity extends Activity implements HandwritingView.StrokeList
     private void updateCandidates(HCCRRecognizer.Result[] results) {
         for (int i = 0; i < TOPK; i++) {
             if (i < results.length) {
-                candButtons[i].setText(results[i].ch);
+                candButtons[i].setText(results[i].text);
                 candButtons[i].setEnabled(true);
                 candButtons[i].setAlpha(1.0f);
             } else {

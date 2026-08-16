@@ -18,7 +18,7 @@ find_package(ncnn REQUIRED)
 set(HCCR_CORE_CPP ${CMAKE_CURRENT_LIST_DIR}/../../../../../src/cpp)
 
 add_library(hccr_jni SHARED
-    hccr_jni.cc
+    ${CMAKE_CURRENT_LIST_DIR}/../../../../runtime/src/main/jni/hccr_jni.cc
     ${HCCR_CORE_CPP}/preprocess.c
 )
 target_include_directories(hccr_jni PRIVATE ${HCCR_CORE_CPP})

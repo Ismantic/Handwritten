@@ -62,6 +62,7 @@ save/       PNNX/NCNN 导出、FP16/INT8 量化、基准
 models/     从 Hugging Face 下载的本地模型缓存
 demo/       Tkinter 与命令行推理
 android/    Java + JNI + NCNN 独立应用
+android/runtime/  供 Demo 与下游 Android 应用复用的 HCCR runtime
 test/       单元测试、跨实现一致性、指标复现
 docs/       训练、部署和设计理由
 ```
